@@ -20,11 +20,8 @@
 *.tar
 /public/datasets/gtnh/
 
-# agent scratch: screenshots, probes, captures, logs (local only, see AGENTS.md)
 /scratch/
 /.worktrees/
-/.claude/settings.local.json
-/.claude/scheduled_tasks.lock
 /*.png
 /*.jpg
 /*.jpeg
@@ -70,12 +67,10 @@ tools/parity/out/
 # the live service bundle (npm run build:live)
 /dist-live/
 
-# 本机缓存与便携工具（中文自用版额外加的）
+# 鏈満缂撳瓨涓庝究鎼哄伐鍏凤紙涓枃鑷敤鐗堥澶栧姞鐨勶級
 /.npm-cache/
 /.tools/
 
-# 数据脚本在根目录跑时可能留下的副本
-/datasets.manifest.json
+# 鏁版嵁鑴氭湰鍦ㄦ牴鐩綍璺戞椂鍙兘鐣欎笅鐨勫壇鏈?/datasets.manifest.json
 
-# 数据脚本在仓库根目录跑时留下的副本（真正的数据在 public/datasets）
-/local-2.9.0-rc-2/
+# 鏁版嵁鑴氭湰鍦ㄤ粨搴撴牴鐩綍璺戞椂鐣欎笅鐨勫壇鏈紙鐪熸鐨勬暟鎹湪 public/datasets锛?/local-2.9.0-rc-2/

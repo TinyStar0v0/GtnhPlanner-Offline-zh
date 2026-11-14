@@ -4,6 +4,7 @@
 import { createWriteStream, mkdirSync, statSync, existsSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import https from "node:https";
+import { createProgress } from "./progress.mjs";
 
 const BASE = "https://gtnhplanner.com";
 const OUT = process.argv[2];
@@ -50,20 +51,19 @@ function once(url, dest, depth = 0) {
       const total = Number(res.headers["content-length"] ?? 0) + (res.statusCode === 206 ? have : 0);
       const file = createWriteStream(part, { flags: have > 0 && res.statusCode === 206 ? "a" : "w" });
       let got = have;
-      let lastLog = Date.now();
+      const name = dest.split(/[\\/]/).pop();
+      const progress = createProgress({ label: name.slice(0, 26).padEnd(26), total: total || 0, unit: "B" });
+      if (have > 0) progress.note(`  ${name} 从 ${(have / 1048576).toFixed(1)} MB 处续传`);
       res.on("data", (chunk) => {
         got += chunk.length;
-        if (Date.now() - lastLog > 15000) {
-          lastLog = Date.now();
-          const pct = total ? ((got / total) * 100).toFixed(1) : "?";
-          console.log(
-            `  ${dest.split(/[\\/]/).pop()} ${(got / 1048576).toFixed(2)}/${(total / 1048576).toFixed(2)}MB ${pct}%`,
-          );
-        }
+        progress.update(got);
       });
       res.on("error", reject);
       file.on("error", reject);
-      file.on("finish", () => file.close(() => resolve({ got, total })));
+      file.on("finish", () => file.close(() => {
+        progress.finish(total || got);
+        resolve({ got, total });
+      }));
       res.pipe(file);
     });
     req.on("timeout", () => req.destroy(new Error("timeout")));
@@ -80,7 +80,7 @@ async function fetchFile(path) {
       const r = await once(BASE + path, dest);
       if (r === "complete" || (r.total && r.got >= r.total) || (!r.total && r.got > 0)) {
         renameSync(dest + ".part", dest);
-        console.log(`done ${path} ${(statSync(dest).size / 1048576).toFixed(2)}MB`);
+        console.log(`  ✓ ${path}  ${(statSync(dest).size / 1048576).toFixed(2)} MB`);
         return "ok";
       }
       console.log(`  partial ${r.got}/${r.total}, retrying`);

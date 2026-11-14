@@ -38,8 +38,7 @@ need Supabase; see [docs/COMMUNITY.md](docs/COMMUNITY.md).
   behaviour checked against the mod source) and an LP-based solver.
 - `src/components/`, `src/store/`: the Next.js + React Flow UI and Zustand stores.
 
-Working notes for contributors and AI agents are in [AGENTS.md](AGENTS.md) and the
-`CLAUDE.md` file in each area's folder.
+Contributor notes live in docs/ARCHITECTURE.md.
 
 ## License and credits
 

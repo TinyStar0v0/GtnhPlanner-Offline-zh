@@ -23,7 +23,7 @@ two, so staging cannot try the RC-2 data while the old site runs beta-2. `/opt/d
 ### Phase A. Before the day (nothing players can see)
 
 1. **RC-2 recipe data.** Export from the RC-2 pack with the oracle mod and rebuild as `local-2.9.0-rc-2`
-   (`tools/dataset-pipeline/CLAUDE.md`). A fresh export re-mints about 37,000 crafting, furnace, bee, crop and essentia
+   （数据集管道的约定）. A fresh export re-mints about 37,000 crafting, furnace, bee, crop and essentia
    recipe ids: carry the beta-2 ids over (match recipes by content key, as `graft-sparge.js` does) so saved plans keep
    their recipes. Run `normalize-fluid-icon-alpha.mjs --rename`. Regenerate the mod's machine data and goldens from
    it (`tools/audits/export-mod-machine-data.mjs`) and re-run the mod's tests.

@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
+import { createProgress } from "./progress.mjs";
 import zlib from "node:zlib";
 
 const root = process.argv[2];
@@ -59,7 +60,9 @@ const pending = shards
   }))
   .filter(({ local }) => !fs.existsSync(local));
 
-console.log(`shards: ${shards.length}, missing: ${pending.length}`);
+console.log(`配方分片：共 ${shards.length} 个，缺 ${pending.length} 个`);
+const progress = createProgress({ label: "配方分片", total: Math.max(pending.length, 1), unit: "个" });
+if (pending.length === 0) progress.finish(1, "已全部下载，无需重下");
 
 const CONCURRENCY = 10;
 let done = 0;
@@ -83,12 +86,10 @@ async function worker(queue) {
         }
       }
     }
-    if ((done + failed) % 100 === 0) {
-      console.log(`progress ${done + failed}/${pending.length}`);
-    }
+    progress.update(done + failed, `${item.remote.split("/").pop()}${failed ? `（失败 ${failed}）` : ""}`);
   }
 }
 
 const queue = [...pending];
 await Promise.all(Array.from({ length: CONCURRENCY }, () => worker(queue)));
-console.log(`DONE downloaded=${done} failed=${failed}`);
+progress.finish(done + failed, `完成 ${done} 个${failed ? `，失败 ${failed} 个` : ""}`);

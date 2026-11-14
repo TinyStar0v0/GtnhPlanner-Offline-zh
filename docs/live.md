@@ -162,7 +162,7 @@ same `game.server` hash as one of the asker's own game connections **and** whose
 
 The website joins the room of the design on the canvas when it is a cloud plan: one of ours the account holds
 (`<my id>:<design id>`), or this device's copy of a plan shared with us. One socket per browser tab
-(`src/store/live-session.ts`); the rules the stores keep are in `src/store/CLAUDE.md` (Live plans).
+(`src/store/live-session.ts`); the rules the stores keep are in `src/store/` (Live plans).
 
 - Every edit the store makes outside a quiet change is shaped (`live-shape.ts`: `metadata`, `name`, `view`,
   `poolCellRatios` and GregTech runtime tables left out), diffed, and sent as one batch; others' batches land as the

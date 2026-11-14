@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
 import zlib from "node:zlib";
+import { createProgress } from "./progress.mjs";
 
 const root = process.argv[2];
 const VERSION = "local-2.9.0-rc-2";
@@ -34,7 +35,9 @@ for (const resource of catalog.resources) {
 
 const missing = targets.filter((item) => !fs.existsSync(item.local));
 fs.appendFileSync(LOG, `--- start: ${targets.length} icons, ${missing.length} missing\n`);
-console.log(`icons: ${targets.length}, already: ${targets.length - missing.length}, to fetch: ${missing.length}`);
+console.log(`物品图标：共 ${targets.length} 张，已有 ${targets.length - missing.length} 张，待下载 ${missing.length} 张`);
+const progress = createProgress({ label: "物品图标", total: Math.max(missing.length, 1), unit: "张" });
+if (missing.length === 0) progress.finish(1, "已全部下载，无需重下");
 
 const agent = new https.Agent({ keepAlive: true, maxSockets: 32, maxFreeSockets: 8 });
 let done = 0;
@@ -124,19 +127,13 @@ async function worker(queue) {
     }
     if (ok) done++;
     const total = done + failed;
-    if (total % 1000 === 0) {
-      const rate = total / ((Date.now() - started) / 1000);
-      const left = Math.round((queue.length + total) / Math.max(rate, 0.1));
-      const line = `progress ${total}/${missing.length} | ${rate.toFixed(1)}/s | eta ${Math.round(left / 60)} min`;
-      console.log(line);
-      fs.appendFileSync(LOG, `${line}\n`);
-    }
+    progress.update(total, `${item.remote.split("/").pop().slice(0, 40)}${failed ? `（失败 ${failed}）` : ""}`);
   }
 }
 
 await Promise.all(Array.from({ length: 32 }, () => worker(missing)));
 agent.destroy();
-console.log(`DONE fetched=${done} failed=${failed}`);
+progress.finish(done + failed, `完成 ${done} 张${failed ? `，失败 ${failed} 张` : ""}`);
 fs.appendFileSync(LOG, `--- done: fetched=${done} failed=${failed}\n`);
 if (failures.length) {
   fs.writeFileSync(path.join(root, "scratch", "icon-failures.json"), JSON.stringify(failures, null, 1));
