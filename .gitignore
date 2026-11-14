@@ -76,3 +76,6 @@ tools/parity/out/
 
 # 数据脚本在根目录跑时可能留下的副本
 /datasets.manifest.json
+
+# 数据脚本在仓库根目录跑时留下的副本（真正的数据在 public/datasets）
+/local-2.9.0-rc-2/
