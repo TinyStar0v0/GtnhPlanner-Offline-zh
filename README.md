@@ -17,6 +17,32 @@
 
 想看到完整报错：在文件夹的地址栏输入 `cmd` 回车，再执行 `start.cmd`，窗口就不会关。
 每次启动的诊断也都会写进 `scratch\logs\start.log`。
+## 数据自动更新（每日构筑）
+
+本地的配方数据是**快照**：上游 [gtnhplanner.com](https://gtnhplanner.com) 发布新版本后，
+这里不会自动变。三种更新方式：
+
+```powershell
+update.cmd            # 检查 + 下载（有新版本才下，支持断点续传）
+update.cmd --check    # 只检查，不下载
+```
+
+**每天自动检查**（Windows 计划任务）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\tools\register-daily-update.ps1
+# 默认每天 04:00；可加 -Time 03:30 改时间
+# 取消：加 -Remove
+```
+
+日志写在 `scratch\logs\update.log`。更新完重启 `start.cmd` 生效（服务端有内存缓存）。
+
+更新脚本做的事：对比线上 `datasets.manifest.json` 的版本号与校验和 → 只下载变化的部分
+（版本索引、配方整包、缺的分片、缺的图标），全程带进度条。
+
+> 上游仓库里那套「数据集自动化」是另一回事：它用 GitHub Actions 下载官方 GTNH 构建，
+> 在无头 JVM 里跑 oracle 模组导出配方、渲染图标，再发布成 `datasets/gtnh/<version>/`。
+> 那需要真实的 GTNH 客户端和他们的导出模组，本地做不了；我们直接消费他们发布的结果。
 ## 第一次部署
 
 ```powershell
