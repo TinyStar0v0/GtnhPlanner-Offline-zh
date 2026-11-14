@@ -18,11 +18,16 @@ process.on("unhandledRejection", (reason) => {
   fs.appendFileSync(LOG, `unhandled: ${reason?.stack ?? reason}\n`);
 });
 
-const catalog = JSON.parse(
-  zlib
-    .gunzipSync(fs.readFileSync(path.join(root, "public", "datasets", "gtnh", VERSION, "resource-index.json.gz")))
-    .toString("utf8"),
-);
+const catalogPath = path.join(root, "public", "datasets", "gtnh", VERSION, "resource-index.json.gz");
+if (!fs.existsSync(catalogPath)) {
+  console.error("");
+  console.error("  找不到资源索引：" + catalogPath);
+  console.error("  配方数据还没下载。请先跑 setup.cmd，或者：");
+  console.error("    node scripts/data/fetch-dataset.mjs .");
+  console.error("");
+  process.exit(1);
+}
+const catalog = JSON.parse(zlib.gunzipSync(fs.readFileSync(catalogPath)).toString("utf8"));
 
 const seen = new Set();
 const targets = [];

@@ -7,8 +7,18 @@ import https from "node:https";
 import { createProgress } from "./progress.mjs";
 
 const BASE = "https://gtnhplanner.com";
-const OUT = process.argv[2];
+const ROOT = process.argv[2] ?? ".";
 const VERSION = "local-2.9.0-rc-2";
+// 数据必须落到 public/datasets/gtnh：服务端和另外两个脚本都从这里读。
+const OUT = join(ROOT, "public", "datasets", "gtnh");
+
+// 早期版本把数据写到了包根目录，这里顺手搬回去，省得用户手动挪。
+const legacyDir = join(ROOT, VERSION);
+if (existsSync(legacyDir) && !existsSync(join(OUT, VERSION))) {
+  mkdirSync(OUT, { recursive: true });
+  renameSync(legacyDir, join(OUT, VERSION));
+  console.log(`  ↪ 把上次放错位置的数据移到 public/datasets/gtnh/${VERSION}`);
+}
 const FILES = [
   "/datasets/gtnh/datasets.manifest.json",
   `/datasets/gtnh/${VERSION}/resource-index.json.gz`,
@@ -92,8 +102,9 @@ async function fetchFile(path) {
   throw new Error(`gave up on ${path}`);
 }
 
+console.log(`数据目录：${OUT}`);
 for (const path of FILES) {
-  console.log(`fetch ${path}`);
+  console.log(`\n下载 ${path}`);
   await fetchFile(path);
 }
 console.log("ALL FILES DONE");

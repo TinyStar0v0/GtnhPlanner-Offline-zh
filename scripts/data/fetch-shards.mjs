@@ -11,6 +11,14 @@ const manifestPath = path.join(root, "public", "datasets", "gtnh", "local-2.9.0-
 const base = "https://gtnhplanner.com";
 const outDir = path.join(root, "public", "datasets", "gtnh", "local-2.9.0-rc-2", "recipes-shards");
 
+if (!fs.existsSync(manifestPath)) {
+  console.error("");
+  console.error("  找不到配方索引：" + manifestPath);
+  console.error("  配方数据还没下载。请先跑 setup.cmd，或者：");
+  console.error("    node scripts/data/fetch-dataset.mjs .");
+  console.error("");
+  process.exit(1);
+}
 const catalog = JSON.parse(zlib.gunzipSync(fs.readFileSync(manifestPath)).toString("utf8"));
 const shards = catalog.shards;
 fs.mkdirSync(outDir, { recursive: true });

@@ -43,6 +43,13 @@ echo   [2/4] Fetching the recipe dataset...
 node scripts\data\fetch-dataset.mjs .
 if errorlevel 1 goto fetch_fail
 
+if not exist "public\datasets\gtnh\datasets.manifest.json" (
+  echo.
+  echo   The dataset did not land in public\datasets\gtnh. See the messages above.
+  pause
+  exit /b 1
+)
+
 echo   [3/4] Fetching the 1112 recipe shards...
 node scripts\data\fetch-shards.mjs .
 if errorlevel 1 goto fetch_fail
