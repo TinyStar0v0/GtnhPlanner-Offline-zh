@@ -29,6 +29,14 @@ if not exist "node_modules" (
   )
 )
 
+if not exist "public\datasets\gtnh\datasets.manifest.json" (
+  echo.
+  echo   The recipe dataset is missing. Run setup.cmd first ^(one time, needs network^).
+  echo.
+  pause
+  exit /b 1
+)
+
 node scripts\serve.mjs dev 3100 %*
 if errorlevel 1 (
   echo.
