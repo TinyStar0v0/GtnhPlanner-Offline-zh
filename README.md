@@ -1,4 +1,4 @@
-# GTNH Planner 中文自用版
+# GTNH Planner 中文离线版
 
 把 [gtnhplanner.com](https://gtnhplanner.com)（上游源码：`jackwrichards/gtnh-factory-flow`，MIT）
 改成只在自己机器上跑的中文版：配方数据整套下载到本地，界面与物品、机器、配方名换成简体中文，
