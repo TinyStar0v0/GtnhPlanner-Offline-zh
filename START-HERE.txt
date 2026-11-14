@@ -1,0 +1,47 @@
+GTNH Planner 中文自用版 v1.1.0 —— 免安装包
+================================================
+
+这个包双击就能用，不需要提前装 Node.js。
+第一次运行会联网下载：便携版 Node.js（35 MB）、依赖（约 500 MB）、
+配方数据与图标（约 400 MB）。之后就可以离线使用。
+
+一、首次使用
+------------
+1. 双击  setup.cmd
+   它会自动：下载便携版 Node.js → 安装依赖 → 下载配方数据 → 下载图标
+   全程约 10–30 分钟，看网速。中途断了就再双击一次，会接着下。
+
+2. 双击  start.cmd
+   窗口里出现「已启动」后，浏览器会自动打开 http://127.0.0.1:3100
+
+3. 以后每次开机，只要双击 start.cmd；不想用了就关掉那个黑窗口，
+   或者双击 stop.cmd。
+
+二、起不来怎么办
+----------------
+双击后窗口一闪就关，是脚本在报错后停在「按任意键继续」。看窗口里那行提示：
+
+  · 提示没有 Node          → setup.cmd / start.cmd 会自己下；下不动就手动装
+                             https://nodejs.org/ （18 以上）
+  · 提示缺数据             → 先双击 setup.cmd
+  · 提示端口 3100 被占用   → 双击 stop.cmd，或改 start.cmd 里的端口号
+  · 提示已经在跑           → 正常，站点已经在运行
+
+每次启动的原因都会写进 scratch\logs\start.log。
+想看完整报错：在文件夹地址栏输入 cmd 回车，再敲 start.cmd，窗口就不会关。
+
+三、目录说明
+------------
+  start.cmd / setup.cmd / stop.cmd   三个入口
+  scripts\data\                      下载配方数据和图标的脚本
+  scripts\launch.mjs                 启动前的自检
+  src\                               源码（想改界面/汉化看这里）
+  docs\ARCHITECTURE.md               代码结构
+  docs\MOD-LINK.md                   和游戏内 GTNH Planner 模组的联动
+  README.md                          完整说明
+
+四、许可
+--------
+代码 GPL-3.0（见 LICENSE、NOTICE.md）。
+GTNH、Minecraft、各 mod 的配方数据与贴图版权归各自作者，
+本包不含这些数据，由 setup.cmd 从公开地址拉取，仅限个人使用。
