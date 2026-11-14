@@ -6,8 +6,8 @@
 > （schannel 拿不到凭据、GCM 需要命名管道）。
 >
 > 两条路：
-> - 装了 Git for Windows 后，双击本目录下的 **`push.cmd`**，浏览器弹窗登录即可；
-> - 或者 `push.cmd <你的 token>`（fine-grained，只给这个仓库 Contents 写权限），
+> - 装了 Git for Windows 后，双击 **`scripts\release\push.cmd`**，浏览器弹窗登录即可；
+> - 或者 `scripts\release\push.cmd <你的 token>`（fine-grained，只给这个仓库 Contents 写权限），
 >   推完脚本会把带 token 的地址换回干净地址，之后去 GitHub 撤销 token。
 >
 > 下面是从零开始发布时的完整说明，留作参考。
@@ -90,9 +90,9 @@ git push -u origin main
 仓库里没有配方数据和图标（版权归 GTNH，且 342 MB）。`README.zh.md` 的「数据从哪来」一节写了：
 
 ```powershell
-node scripts/fetch-dataset.mjs .
-node scripts/fetch-shards.mjs .
-node scripts/fetch-icons.mjs .
+node scripts/data/fetch-dataset.mjs .
+node scripts/data/fetch-shards.mjs .
+node scripts/data/fetch-icons.mjs .
 ```
 
 两个脚本都支持断点续传，从 gtnhplanner.com 的公开地址拉取。拉完 `start.cmd` 就能跑。

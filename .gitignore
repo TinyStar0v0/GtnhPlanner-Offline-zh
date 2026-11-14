@@ -73,3 +73,6 @@ tools/parity/out/
 # 本机缓存与便携工具（中文自用版额外加的）
 /.npm-cache/
 /.tools/
+
+# 数据脚本在根目录跑时可能留下的副本
+/datasets.manifest.json

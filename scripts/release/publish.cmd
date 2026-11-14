@@ -3,7 +3,7 @@ chcp 65001 >nul
 rem One-click publish: init repo, commit, add remote, push.
 rem Requires Git for Windows (https://git-scm.com/download/win).
 setlocal enabledelayedexpansion
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 set "GIT=git"
 where git >nul 2>&1

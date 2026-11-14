@@ -5,7 +5,7 @@ rem   push.cmd              -> normal push (Git for Windows will open a browser 
 rem   push.cmd <TOKEN>      -> push with a Personal Access Token (no browser, no helper)
 rem The token is used once and the remote is reset to the clean URL afterwards.
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 set "GIT=git"
 where git >nul 2>&1

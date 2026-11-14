@@ -27,8 +27,10 @@ setup.cmd
 start.cmd
 ```
 
-`setup.cmd` 会依次：`npm install` → 拉配方数据集 → 拉 1112 个配方分片 → 拉 5.75 万张图标。
-中途断了重跑即可，三个脚本都支持断点续传。
+`setup.cmd` 会依次：**没装 Node 就自动下载便携版**（约 35 MB）→ `npm install` → 拉配方数据集 →
+拉 1112 个配方分片 → 拉 5.75 万张图标。中途断了重跑即可，三个脚本都支持断点续传。
+
+如果连 Node 都没有，`start.cmd` 也会先自动下便携版 Node 到 `.tools\node`，不用你手动装。
 
 ## 重启电脑之后怎么打开
 
@@ -62,6 +64,16 @@ cd gtnhplanner-zh
 npm install       # 本机已装好，可跳过
 npm run dev       # http://localhost:3000
 ```
+
+## 和游戏内模组联动
+
+装了 **GTNH Planner 模组**（`GTNewHorizons/PlanNH`，0.2.0+）并进游戏后，网页的
+**Share → Open in the mod** 会把当前方案直接送进游戏，不用抄方案码。
+原理、端口范围、浏览器授权与排错见 [docs/MOD-LINK.md](docs/MOD-LINK.md)。
+
+## 代码结构
+
+目录怎么分、汉化文件在哪、加代码该放哪：见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 数据从哪来
 
@@ -133,9 +145,7 @@ gtnhplanner-zh/
 ├─ public/datasets/gtnh/      本地数据集（不入版本库）
 ├─ src/lib/i18n/              中文化：ui.zh.json、names.zh.json、t()、服务端换名
 ├─ src/app/api/dataset/       静态数据集接口（原来的 [versionId] 动态路由改成固定路径）
-├─ scripts/fetch-dataset.mjs  拉数据集（manifest、索引、配方整包）
-├─ scripts/fetch-shards.mjs   拉 1112 个配方分片
-├─ scripts/fetch-icons.mjs    拉 5.7 万张物品图标（断点续传）
+├─ scripts/data/              拉数据集 / 分片 / 图标（见 docs/ARCHITECTURE.md）
 └─ scratch/                   本次改造用的临时脚本与产物（不入库）
 ```
 
@@ -146,6 +156,6 @@ gtnhplanner-zh/
 上游代码原为 MIT（Samiracle64、jackwrichards），原始声明保留在 [NOTICE.md](NOTICE.md)。
 
 GTNH、Minecraft、各 mod 的素材与配方数据不属于本项目，**不随仓库分发**：clone 下来后
-用 `scripts/fetch-dataset.mjs` / `fetch-shards.mjs` / `fetch-icons.mjs` 自己拉，且只供个人使用。
+用 `scripts/data/` 下的三个脚本自己拉，且只供个人使用。
 
 发布步骤见 [PUBLISH.md](PUBLISH.md)。
