@@ -2,7 +2,7 @@
 
 把 [gtnhplanner.com](https://gtnhplanner.com)（上游源码：`jackwrichards/gtnh-factory-flow`，MIT）
 改成只在自己机器上跑的中文版：配方数据整套下载到本地，界面与物品、机器、配方名换成简体中文，
-社区、账户、云同步、反馈、统计这些联网功能都去掉了。
+移除社区、账户、云同步、反馈、统计。
 
 ## 起不来怎么办
 
