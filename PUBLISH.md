@@ -1,7 +1,7 @@
 # 发布到 GitHub
 
 > **当前状态**：本地仓库已经初始化并提交好了（`398db71`，1,743 个文件），
-> 远程已指向 <https://github.com/TinyStar0v0/GtnhplannerWeb-zh.git>。
+> 远程已指向 <https://github.com/TinyStar0v0/GtnhplannerWeb-Offline-zh.git>。
 > 只剩下 `git push` 这一步——它需要登录凭据，在这台机器的沙箱里做不了
 > （schannel 拿不到凭据、GCM 需要命名管道）。
 >
