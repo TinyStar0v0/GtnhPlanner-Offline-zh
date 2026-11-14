@@ -1,0 +1,980 @@
+"use client";
+
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import {
+  getAlternativeCycleFaces,
+  getAlternativeCycleTick,
+  getServerAlternativeCycleTick,
+  subscribeToAlternativeCycle,
+  type AlternativeCycleFace,
+} from "@/lib/nei/alternative-cycle";
+import { Zap } from "lucide-react";
+import type { ResourceAmount, ResourceIconAtlasRef, ResourceKind } from "@/lib/model/types";
+import { NEI_TEXTURES } from "@/lib/nei-renderer/theme/textures";
+import {
+  formatNumberWithThousands,
+  resourceLabel,
+  isOreDictionaryResource,
+  stripOreDictionaryPrefix,
+  trimTrailingDecimalZeros,
+} from "@/lib/model/resources";
+import { isProgrammedCircuitResource } from "@/lib/model/programmed-circuit";
+import { MinecraftTooltip } from "./MinecraftTooltip";
+import { getSpriteFitScale, spriteFitStyle } from "./sprite-fit";
+import { t } from "@/lib/i18n";
+
+
+type DisplayResourceAmount = Pick<
+  ResourceAmount,
+  | "kind"
+  | "id"
+  | "amount"
+  | "displayName"
+  | "iconPath"
+  | "iconAtlas"
+  | "dominantColor"
+  | "tooltip"
+  | "alternatives"
+> & {
+  consumed?: boolean;
+  chance?: number;
+};
+
+interface ResourceIconProps {
+  resource?: DisplayResourceAmount;
+  size?: "sm" | "md" | "lg" | "xl";
+  showAmount?: boolean;
+  showName?: boolean;
+  bare?: boolean;
+  className?: string;
+  tooltip?: boolean;
+  iconPixelSize?: number;
+  /** Preferred item magnification; opaque bounds still cap it inside the slot. */
+  itemZoom?: number;
+  showConsumedState?: boolean;
+  /**
+   * Set on slots that rotate through an oredict's members. `locked` means the
+   * slot was scrolled and has stopped on one item.
+   */
+  alternativeState?: "cycling" | "locked";
+}
+
+const sizeClasses = {
+  sm: "h-9 w-9",
+  md: "h-12 w-12",
+  lg: "h-14 w-14",
+  xl: "h-20 w-20",
+};
+
+const RESOURCE_ART_SHADOW = "drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)]";
+// Exported fluid textures occupy the middle half of their padded canvas.
+// Clip the texture first, then cast its shadow from the outer art frame.
+const FLUID_SPRITE_CLIP = "inset(25% round 1px)";
+
+function ResourceIconComponent({
+  resource,
+  size = "md",
+  showAmount = true,
+  showName = false,
+  bare = false,
+  className = "",
+  tooltip = true,
+  iconPixelSize,
+  itemZoom = 1,
+  showConsumedState = true,
+  alternativeState,
+}: ResourceIconProps) {
+  // Artwork deliberately exceeds its clipped slot. Every art renderer below
+  // must opt out of flex shrinking: Firefox shrinks percentage-sized <img>
+  // widths where Chromium keeps their aspect-ratio minimum; atlas spans shrink
+  // in both engines. That made the same sprite smaller or stretched by format.
+  const icon = (
+    <div
+      style={{ "--resource-item-zoom": itemZoom } as CSSProperties}
+      className={[
+        "relative flex shrink-0 items-center justify-center overflow-hidden",
+        bare
+          ? ""
+          : "border border-[#373737] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#cfcfcf,inset_-2px_-2px_0_#4d4d4d]",
+        sizeClasses[size],
+        resource || bare
+          ? ""
+          : "bg-[#3a3a3a] opacity-100 shadow-[inset_1px_1px_0_#5d5d5d,inset_-1px_-1px_0_#1f1f1f]",
+        // The circuit's art is a near-black chip, drawn on a light grey panel
+        // at the size of a fingernail. Left as it is, the setting a recipe
+        // will not run without is the hardest thing on the card to see. Drawn
+        // bare (the clean card's badge, on a dark well) it keeps its own art.
+        !bare && resource && isProgrammedCircuitResource(resource)
+          ? "[&_.minecraft-pixel-art]:brightness-[1.9] [&_.minecraft-pixel-art]:contrast-[1.15] [&_.minecraft-pixel-art]:saturate-[1.2]"
+          : "",
+        className,
+      ].join(" ")}
+    >
+      <CategoryIconImage resource={resource} iconPixelSize={iconPixelSize} />
+
+      {resource && showAmount ? <AmountLabel resource={resource} /> : null}
+
+      {/* Circuits get no "NC" marker: they are a machine setting, never consumed. */}
+      {showConsumedState && resource?.consumed === false && !isProgrammedCircuitResource(resource) ? (
+        <span
+          title={t("Not consumed")}
+          className="absolute left-0 top-0 font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]"
+        >
+          {t("NC")}</span>
+      ) : null}
+
+      {resource && alternativeState === "locked" && shouldShowAlternativeMarker(resource) ? (
+        <span
+          className="absolute left-0 bottom-0 font-mono text-[9px] font-black leading-none text-[#ffaa00] drop-shadow-[1px_1px_0_#000]"
+        >
+          ■
+        </span>
+      ) : null}
+
+      {resource && showName ? (
+        <span className="absolute left-0.5 top-0.5 max-w-[calc(100%-4px)] truncate font-mono text-[8px] leading-none text-white drop-shadow-[1px_1px_0_#000]">
+          {resourceLabel(resource)}
+        </span>
+      ) : null}
+    </div>
+  );
+
+  if (!tooltip) {
+    return icon;
+  }
+
+  // Built only on the tooltip path: icons rendered with `tooltip={false}`
+  // number in the hundreds and must skip this string build.
+  return (
+    <MinecraftTooltip label={buildTooltipLabel(resource, alternativeState)}>{icon}</MinecraftTooltip>
+  );
+}
+
+function atlasEquals(a?: ResourceIconAtlasRef, b?: ResourceIconAtlasRef): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.imagePath === b.imagePath &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height &&
+    a.atlasWidth === b.atlasWidth &&
+    a.atlasHeight === b.atlasHeight
+  );
+}
+
+function displayResourceEquals(
+  a?: DisplayResourceAmount,
+  b?: DisplayResourceAmount,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.kind === b.kind &&
+    a.id === b.id &&
+    a.amount === b.amount &&
+    a.displayName === b.displayName &&
+    a.iconPath === b.iconPath &&
+    atlasEquals(a.iconAtlas, b.iconAtlas) &&
+    a.dominantColor === b.dominantColor &&
+    // Dataset arrays: a call-site spread copies the same references, so
+    // identity is the honest comparison.
+    a.tooltip === b.tooltip &&
+    a.alternatives === b.alternatives &&
+    a.consumed === b.consumed &&
+    a.chance === b.chance
+  );
+}
+
+/**
+ * Memoised because the canvas and recipe book mount these by the hundred.
+ * The resource is compared field by field because nearly every call site
+ * builds it fresh (`{...port.resource, amount: 1}`), which defeats a
+ * shallow compare.
+ */
+export const ResourceIcon = memo(
+  ResourceIconComponent,
+  (prev, next) =>
+    prev.size === next.size &&
+    prev.showAmount === next.showAmount &&
+    prev.showName === next.showName &&
+    prev.bare === next.bare &&
+    prev.className === next.className &&
+    prev.tooltip === next.tooltip &&
+    prev.iconPixelSize === next.iconPixelSize &&
+    prev.itemZoom === next.itemZoom &&
+    prev.showConsumedState === next.showConsumedState &&
+    prev.alternativeState === next.alternativeState &&
+    displayResourceEquals(prev.resource, next.resource),
+);
+
+/**
+ * A slot never accepts the other form (fluid vs filled cell), so a cross-form
+ * alternative must not be advertised as a substitute, marker included: the
+ * board would refuse the wire. Crossing forms takes a Canner, as in game.
+ */
+function shouldShowAlternativeMarker(resource: DisplayResourceAmount): boolean {
+  return Boolean(
+    resource.alternatives?.some((alternative) => !isFluidCellAlternative(resource, alternative)),
+  );
+}
+
+function isFluidCellAlternative(
+  resource: DisplayResourceAmount,
+  alternative: NonNullable<DisplayResourceAmount["alternatives"]>[number],
+): boolean {
+  return (
+    (resource.kind === "item" && alternative.kind === "fluid") ||
+    (resource.kind === "fluid" && alternative.kind === "item")
+  );
+}
+
+function buildTooltipLabel(
+  resource: ResourceIconProps["resource"],
+  alternativeState?: ResourceIconProps["alternativeState"],
+) {
+  if (!resource) {
+    return undefined;
+  }
+
+  if (isBeeSpeciesResource(resource)) {
+    return resourceLabel(resource);
+  }
+
+  const baseLines = resource.tooltip?.length
+    ? [
+        resourceLabel(resource),
+        ...resource.tooltip.filter(
+          (line) =>
+            stripOreDictionaryPrefix(line) &&
+            !isNbtTooltipLine(line) &&
+            !isOreDictionaryNoiseLine(line),
+        ),
+      ]
+    : [resourceLabel(resource)].filter(Boolean);
+  const chanceLine =
+    resource.chance !== undefined && Number.isFinite(resource.chance) && resource.chance < 1
+      ? `Chance: ${trimAmount(resource.chance * 100)}%`
+      : undefined;
+  const consumedLine =
+    resource.consumed === false && !resource.tooltip?.some(isNotConsumedTooltipLine)
+      ? "Not consumed"
+      : undefined;
+  // Both short enough to sit on one line at the panel's width: a hint that wraps
+  // mid-sentence reads worse than no hint at all.
+  const cycleLine =
+    alternativeState === "locked"
+      ? "Scroll to change."
+      : alternativeState === "cycling"
+        ? "Scroll to pick one."
+        : undefined;
+
+  return [...baseLines, cycleLine, chanceLine, consumedLine].filter(Boolean).join("\n");
+}
+
+/**
+ * Ore dictionary bookkeeping lines, left out of a rotating slot's tooltip:
+ * listing every group member (e.g. `logWood`) covers the card. The wheel
+ * shows alternatives one at a time, so the tip names only the current one.
+ */
+function isOreDictionaryNoiseLine(line: string): boolean {
+  const normalized = line.trim().toLowerCase();
+  return normalized.startsWith("accepts:") || normalized.startsWith("ore dictionary:");
+}
+
+// Only this leaf subscribes to the clock. Names, amounts, handles, wire colors
+// and the solver never see a preview face. Concrete resources stay still.
+function CategoryIconImage(props: { resource?: DisplayResourceAmount; iconPixelSize?: number }) {
+  const faces = props.resource && isOreDictionaryResource(props.resource)
+    ? getAlternativeCycleFaces(props.resource).filter((face) => face.iconPath || face.iconAtlas)
+    : [];
+  if (!props.resource || faces.length === 0) return <IconImage {...props} />;
+  if (faces.length === 1) return <IconImage resource={faces[0]} iconPixelSize={props.iconPixelSize} />;
+  return <CyclingCategoryIcon faces={faces} iconPixelSize={props.iconPixelSize} />;
+}
+
+const visibleCategoryIcons = new Map<Element, (visible: boolean) => void>();
+let categoryIconObserver: IntersectionObserver | undefined;
+const subscribeToNothing = () => () => {};
+
+/** Glance mode keeps the full card mounted but hidden. Those hidden copies
+ * must not animate; one observer also pauses offscreen and collapsed rows. */
+function observeCategoryIcon(element: Element, onVisible: (visible: boolean) => void) {
+  if (typeof IntersectionObserver === "undefined") return () => {};
+  categoryIconObserver ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) visibleCategoryIcons.get(entry.target)?.(entry.isIntersecting);
+  });
+  visibleCategoryIcons.set(element, onVisible);
+  categoryIconObserver.observe(element);
+  return () => {
+    categoryIconObserver?.unobserve(element);
+    visibleCategoryIcons.delete(element);
+    if (visibleCategoryIcons.size === 0) {
+      categoryIconObserver?.disconnect();
+      categoryIconObserver = undefined;
+    }
+  };
+}
+
+function CyclingCategoryIcon({ faces, iconPixelSize }: {
+  faces: AlternativeCycleFace[];
+  iconPixelSize?: number;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    if (ref.current) return observeCategoryIcon(ref.current, setVisible);
+  }, []);
+  // IntersectionObserver tracks clipping, but CSS visibility preserves the
+  // hidden detail layer's layout box. Skip those copies before notifying React.
+  const subscribeVisible = useCallback((notify: () => void) =>
+    subscribeToAlternativeCycle(() => {
+      if (ref.current && getComputedStyle(ref.current).visibility !== "hidden") notify();
+    }), []);
+  const tick = useSyncExternalStore(
+    visible ? subscribeVisible : subscribeToNothing,
+    visible ? getAlternativeCycleTick : getServerAlternativeCycleTick,
+    getServerAlternativeCycleTick,
+  );
+  return (
+    <span ref={ref} className="flex h-full w-full shrink-0 items-center justify-center">
+      <CategoryIconTransition face={faces[tick % faces.length]} iconPixelSize={iconPixelSize} />
+    </span>
+  );
+}
+
+function categoryFaceKey(face: AlternativeCycleFace): string {
+  return JSON.stringify([face.kind, face.id, face.iconPath, face.iconAtlas]);
+}
+
+/** Two persistent layers trade places after decoding. Reusing them avoids
+ * remounting the sprite tree on every tick, including on large boards. */
+function CategoryIconTransition({ face, iconPixelSize }: {
+  face: AlternativeCycleFace;
+  iconPixelSize?: number;
+}) {
+  const [frames, setFrames] = useState<{
+    faces: [AlternativeCycleFace, AlternativeCycleFace?];
+    shown: 0 | 1;
+    pending?: 0 | 1;
+    ready?: boolean;
+  }>({ faces: [face], shown: 0 });
+  useEffect(() => {
+    const key = categoryFaceKey(face);
+    setFrames((current) => {
+      if (categoryFaceKey(current.faces[current.shown]!) === key) {
+        return current.pending !== undefined ? { faces: current.faces, shown: current.shown } : current;
+      }
+      if (current.pending !== undefined && categoryFaceKey(current.faces[current.pending]!) === key) return current;
+      const pending = current.shown === 0 ? 1 : 0;
+      const faces: typeof current.faces = [...current.faces];
+      faces[pending] = face;
+      return { faces, shown: current.shown, pending };
+    });
+  }, [face]);
+  const markReady = useCallback((key: string) => {
+    setFrames((current) => current.pending !== undefined && categoryFaceKey(current.faces[current.pending]!) === key && !current.ready
+      ? { ...current, ready: true } : current);
+  }, []);
+  const finish = useCallback((key: string) => {
+    setFrames((current) => current.pending !== undefined && current.ready && categoryFaceKey(current.faces[current.pending]!) === key
+      ? { faces: current.faces, shown: current.pending } : current);
+  }, []);
+  return (
+    <span className="relative flex h-full w-full items-center justify-center">
+      {frames.faces.map((entry, index) => entry && (
+        <CategoryIconFrame
+          key={index}
+          face={entry}
+          iconPixelSize={iconPixelSize}
+          phase={index === frames.shown ? frames.ready ? "outgoing" : "current"
+            : index === frames.pending && frames.ready ? "incoming" : "loading"}
+          onReady={markReady}
+          onFinish={finish}
+        />
+      ))}
+    </span>
+  );
+}
+
+const CategoryIconFrame = memo(function CategoryIconFrame({ face, iconPixelSize, phase, onReady, onFinish }: {
+  face: AlternativeCycleFace;
+  iconPixelSize?: number;
+  phase: "current" | "loading" | "incoming" | "outgoing";
+  onReady: (key: string) => void;
+  onFinish: (key: string) => void;
+}) {
+  const key = categoryFaceKey(face);
+  const ready = useCallback(() => onReady(key), [key, onReady]);
+  return (
+    <span
+      data-category-frame={phase}
+      aria-hidden={phase === "loading" || phase === "outgoing" || undefined}
+      className={`absolute inset-0 flex items-center justify-center ${phase === "incoming" ? "category-icon-enter" : phase === "outgoing" ? "category-icon-leave" : ""}`}
+      style={phase === "loading" ? { opacity: 0 } : undefined}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget && phase === "incoming") onFinish(key);
+      }}
+    >
+      <CategoryFrameImage resource={face} iconPixelSize={iconPixelSize} onReady={ready} />
+    </span>
+  );
+});
+
+// Phase changes only update the overlapping layers, not the fitted sprites.
+const CategoryFrameImage = memo(IconImage);
+
+function isBeeSpeciesResource(resource: Pick<ResourceAmount, "id">) {
+  return resource.id.startsWith("factoryflow:bee_species:");
+}
+
+function isNotConsumedTooltipLine(line: string) {
+  const normalized = line.toLowerCase();
+  return normalized.includes("not consumed") || normalized.includes("does not get consumed");
+}
+
+function isNbtTooltipLine(line: string) {
+  return line.trim().toLowerCase().startsWith("nbt:");
+}
+
+function IconImage({
+  resource,
+  iconPixelSize,
+  onReady,
+}: {
+  resource?: Pick<
+    ResourceAmount,
+    "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+  >;
+  iconPixelSize?: number;
+  onReady?: () => void;
+}) {
+  if (!resource) {
+    return null;
+  }
+
+  const atlas = resource.iconAtlas;
+  if (atlas) {
+    return <AtlasIconImage resource={resource} atlas={atlas} iconPixelSize={iconPixelSize} onReady={onReady} />;
+  }
+
+  // POWER has no sprite anywhere: EU is app-synthesized, and its face is a
+  // drawn bolt in the app's power gold.
+  if (resource.kind === "power") {
+    return <PowerIconGlyph iconPixelSize={iconPixelSize} />;
+  }
+
+  const iconPath = resource.iconPath ?? getFallbackIconPath(resource);
+  if (!iconPath) {
+    // The dataset ships no art for fluids at all — not one of the thousands of
+    // fluid references carries an iconPath or an atlas entry — so without this
+    // every fluid rendered as an empty slot.
+    if (resource.kind === "fluid") {
+      return <FluidIconImage resource={resource} iconPixelSize={iconPixelSize} />;
+    }
+
+    return null;
+  }
+
+  if (resource.kind === "aspect") {
+    return (
+      <AspectIconImage resource={resource} iconPath={iconPath} iconPixelSize={iconPixelSize} />
+    );
+  }
+
+  return <SpriteImage resource={resource} iconPath={iconPath} iconPixelSize={iconPixelSize} onReady={onReady} />;
+}
+
+/**
+ * EU's icon: a pixel-art lightning bolt in power gold, drawn inline because
+ * power is synthesized by the app and has no dataset sprite. Crisp edges to
+ * match the item pixel art.
+ */
+function PowerIconGlyph({ iconPixelSize }: { iconPixelSize?: number }) {
+  const size = iconPixelSize ?? 32;
+  // The same thunderbolt, same amber, as the POWER button top-left - and a
+  // step smaller than the box, because the bolt reads bigger than a sprite
+  // of equal size (all its ink is in the middle).
+  const bolt = Math.max(10, Math.round(size * 0.7));
+  return (
+    <span
+      aria-hidden
+      className="flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size }}
+    >
+      <Zap width={bolt} height={bolt} className="fill-current text-amber-400" strokeWidth={1.5} />
+    </span>
+  );
+}
+
+/**
+ * One item's sprite, and its placeholder until it arrives.
+ *
+ * A plain `<img>` paints its ALT TEXT while loading, so the image is held
+ * hidden until decoded (`visibility`, because `opacity` does not hide alt
+ * text) with an outline in its place. The outline appears only after
+ * SPRITE_PULSE_DELAY_MS, so a cached sprite never flashes a placeholder.
+ */
+function SpriteImage({
+  resource,
+  iconPath,
+  iconPixelSize,
+  onReady,
+}: {
+  resource: Pick<ResourceAmount, "kind" | "id" | "displayName">;
+  iconPath: string;
+  iconPixelSize?: number;
+  onReady?: () => void;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">("loading");
+  const [fitScale, setFitScale] = useState<number>();
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  // A cached sprite can finish before React has attached onLoad, and a src that
+  // changes has to start over.
+  useEffect(() => {
+    const image = imageRef.current;
+    setStatus(image?.complete ? (image.naturalWidth > 0 ? "loaded" : "failed") : "loading");
+    setFitScale(
+      resource.kind === "item" && image?.complete && image.naturalWidth
+        ? getSpriteFitScale(image)
+        : undefined,
+    );
+  }, [iconPath, resource.kind]);
+
+  useEffect(() => {
+    if (status !== "loaded" || !onReady) return;
+    let active = true;
+    const image = imageRef.current;
+    if (!image) return;
+    // onLoad alone can precede decoding; never uncover an undecoded frame.
+    const decoded = image.decode ? image.decode() : Promise.resolve();
+    void decoded.then(() => { if (active) onReady(); }, () => {});
+    return () => { active = false; };
+  }, [status, iconPath, onReady]);
+
+  return (
+    <>
+      {status === "loaded" ? null : <SpritePlaceholder settled={status === "failed"} />}
+      <span
+        className={[
+          iconPixelSize
+            ? "minecraft-pixel-art block shrink-0 max-w-none"
+            : "minecraft-pixel-art block h-[calc(200%-8px)] w-[calc(200%-8px)] shrink-0 max-w-none",
+          RESOURCE_ART_SHADOW,
+          // Hidden, not transparent: alt text is what we are keeping off screen,
+          // and only `visibility` takes it with the picture.
+          status === "loaded" ? "" : "invisible",
+        ].join(" ")}
+        style={{
+          ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),
+          ...spriteFitStyle(fitScale, iconPixelSize),
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={imageRef}
+          src={iconPath}
+          alt={resourceLabel(resource)}
+          draggable={false}
+          onLoad={(event) => {
+            setFitScale(resource.kind === "item" ? getSpriteFitScale(event.currentTarget) : undefined);
+            setStatus("loaded");
+          }}
+          onError={() => setStatus("failed")}
+          className="block h-full w-full max-w-none object-contain"
+          style={resource.kind === "fluid" ? { clipPath: FLUID_SPRITE_CLIP } : undefined}
+        />
+      </span>
+    </>
+  );
+}
+
+/** How long a sprite gets to arrive before anything is drawn in its place. */
+const SPRITE_PULSE_DELAY_MS = 250;
+
+function SpritePlaceholder({ settled }: { settled: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={[
+        "absolute inset-[18%] rounded-[2px] border border-white/20 bg-white/5 opacity-0",
+        // A sprite that will never arrive stops pulsing and just sits there: a
+        // forever-breathing box reads as "still working on it".
+        settled ? "[animation:none] opacity-100" : "animate-pulse",
+      ].join(" ")}
+      style={settled ? undefined : { animationDelay: `${SPRITE_PULSE_DELAY_MS}ms` }}
+    />
+  );
+}
+
+function AspectIconImage({
+  resource,
+  iconPath,
+  iconPixelSize,
+}: {
+  resource: Pick<ResourceAmount, "id" | "displayName" | "dominantColor">;
+  iconPath: string;
+  iconPixelSize?: number;
+}) {
+  const color = resource.dominantColor ?? getFallbackAspectColor(resource.id);
+  const sizeStyle = iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined;
+
+  return (
+    <span
+      role="img"
+      aria-label={resourceLabel(resource)}
+      className={
+        iconPixelSize
+          ? "minecraft-pixel-art relative block shrink-0 max-w-none"
+          : "minecraft-pixel-art relative block h-[72%] w-[72%] shrink-0 max-w-none"
+      }
+      style={sizeStyle}
+    >
+      <span
+        className="absolute inset-0 bg-black opacity-45"
+        style={{
+          WebkitMaskImage: `url('${iconPath}')`,
+          maskImage: `url('${iconPath}')`,
+          WebkitMaskSize: "100% 100%",
+          maskSize: "100% 100%",
+          transform: "translate(1px, 1px)",
+        }}
+      />
+      <span
+        className="absolute inset-0"
+        style={{
+          backgroundColor: color,
+          WebkitMaskImage: `url('${iconPath}')`,
+          maskImage: `url('${iconPath}')`,
+          WebkitMaskSize: "100% 100%",
+          maskSize: "100% 100%",
+        }}
+      />
+    </span>
+  );
+}
+
+/**
+ * Fraction of the cell the fluid swatch occupies. Item sprites carry a
+ * transparent margin, so a full-bleed swatch would read much heavier.
+ * Exported so storage cards can invert it to size the swatch itself.
+ */
+export const FLUID_ICON_SCALE = 0.56;
+
+/**
+ * Stand-in art for a fluid: a filled cell in the fluid's own colour, bevelled
+ * like a Minecraft tank so it reads as liquid rather than as a colour swatch.
+ */
+function FluidIconImage({
+  resource,
+  iconPixelSize,
+}: {
+  resource: Pick<ResourceAmount, "id" | "displayName" | "dominantColor">;
+  iconPixelSize?: number;
+}) {
+  const color = resource.dominantColor ?? getFallbackFluidColor(resource.id);
+
+  return (
+    <span
+      role="img"
+      aria-label={resourceLabel(resource)}
+      className={`minecraft-pixel-art relative block shrink-0 overflow-hidden rounded-[1px] ${RESOURCE_ART_SHADOW}`}
+      style={
+        iconPixelSize
+          ? { width: iconPixelSize * FLUID_ICON_SCALE, height: iconPixelSize * FLUID_ICON_SCALE }
+          : { width: `${FLUID_ICON_SCALE * 100}%`, height: `${FLUID_ICON_SCALE * 100}%` }
+      }
+    >
+      <span className="absolute inset-0" style={{ backgroundColor: color }} />
+      {/* Surface highlight and floor shadow, so the cell has depth at any size. */}
+      <span
+        className="absolute inset-x-0 top-0 h-1/4"
+        style={{ backgroundColor: "rgba(255,255,255,0.28)" }}
+      />
+      <span
+        className="absolute inset-x-0 bottom-0 h-1/5"
+        style={{ backgroundColor: "rgba(0,0,0,0.28)" }}
+      />
+    </span>
+  );
+}
+
+/**
+ * Deterministic colour for a fluid with no dataset art: well-known fluids by
+ * name, everything else hashed from its id so it is stable everywhere.
+ * Exported so tank cards can tint themselves to match.
+ */
+export function getFallbackFluidColor(id: string): string {
+  const normalized = id.toLowerCase();
+  for (const [needle, color] of FLUID_COLOR_HINTS) {
+    if (normalized.includes(needle)) {
+      return color;
+    }
+  }
+
+  let hash = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = (hash * 31 + normalized.charCodeAt(index)) | 0;
+  }
+
+  // Mid lightness and moderate saturation keep white amount labels legible.
+  return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
+}
+
+const FLUID_COLOR_HINTS: Array<[string, string]> = [
+  ["distilledwater", "#5fb7e8"],
+  ["water", "#3f76e4"],
+  ["lava", "#ef7c17"],
+  ["steam", "#d8d8d8"],
+  ["oxygen", "#7fd8ff"],
+  ["hydrogen", "#c85a5a"],
+  ["nitrogen", "#4f6fb5"],
+  ["oil", "#20201c"],
+  ["fuel", "#c8a02c"],
+  ["lubricant", "#c8b45a"],
+  ["molten", "#e08a2c"],
+  ["plasma", "#f0d0ff"],
+  ["acid", "#9fd12c"],
+  ["milk", "#f0f0f0"],
+  ["honey", "#e0a83c"],
+  ["glue", "#c8b48c"],
+  ["concrete", "#8c8c8c"],
+];
+
+function getFallbackAspectColor(id: string): string {
+  const tag = id.startsWith("thaumcraft:aspect:")
+    ? id.slice("thaumcraft:aspect:".length).toLowerCase()
+    : id.toLowerCase();
+  return ASPECT_COLORS[tag] ?? "#ffffff";
+}
+
+const ASPECT_COLORS: Record<string, string> = {
+  aer: "#ffff7e",
+  alienis: "#805080",
+  aqua: "#3cd4fc",
+  arbor: "#00c800",
+  auram: "#ffc0ff",
+  bestia: "#9f6409",
+  cognitio: "#f9967f",
+  corpus: "#ffcc7f",
+  exanimis: "#3a4000",
+  fabrico: "#809d80",
+  fames: "#9f0000",
+  gelum: "#e1ffff",
+  herba: "#01ac00",
+  humanus: "#ffd7c0",
+  ignis: "#ff5a01",
+  instrumentum: "#4040ee",
+  iter: "#e0585b",
+  limus: "#01ac75",
+  lucrum: "#e5dd5a",
+  lux: "#fff981",
+  machina: "#8080a0",
+  messis: "#e1c16e",
+  metallum: "#b5b5cd",
+  meto: "#eead82",
+  mortuus: "#6a0005",
+  motus: "#cdccf4",
+  ordo: "#d5d4ec",
+  pannus: "#eaeac0",
+  perditio: "#404040",
+  perfodio: "#dcd2d2",
+  permutatio: "#578357",
+  potentia: "#c0ffff",
+  praecantatio: "#cf00ff",
+  sano: "#ff8080",
+  sensus: "#c0ffc0",
+  spiritus: "#ebebfb",
+  telum: "#c05050",
+  tempestas: "#ffffff",
+  tenebrae: "#222222",
+  terra: "#56c000",
+  tutamen: "#00c0c0",
+  vacuos: "#888888",
+  venenum: "#88c800",
+  victus: "#de0005",
+  vinculum: "#9a8080",
+  vitium: "#800080",
+  vitreus: "#80ffff",
+  volatus: "#e7e7d7",
+};
+
+/**
+ * True when this fluid has no sprite and draws the flat colour swatch. A
+ * fluid WITH rendered art has a baked-in transparent margin like any sprite,
+ * so it must be drawn oversized and cropped; only the swatch is edge-to-edge.
+ */
+export function isSwatchFluid(
+  resource: Pick<ResourceAmount, "kind" | "iconPath" | "iconAtlas">,
+): boolean {
+  return resource.kind === "fluid" && !resource.iconPath && !resource.iconAtlas;
+}
+
+/**
+ * The iconPixelSize that makes a rendered sprite's ART fill a box of the
+ * given size, minus a small margin. Most rendered art occupies the middle
+ * half of its canvas; the renderer caps only artwork whose opaque bounds
+ * would cross the slot's margin. Fluids have their own helper.
+ */
+export function spriteArtPixels(box: number): number {
+  const margin = Math.max(2, Math.round(box * 0.055));
+  return (box - margin * 2) * 2;
+}
+
+/**
+ * The iconPixelSize that draws a FLUID sprite's square at 78% of its box:
+ * a solid square reads heavier than sparse item art at equal bounds. The
+ * canvas is twice its art, so the image doubles the wanted art size.
+ */
+export function fluidArtPixels(box: number): number {
+  return Math.round(box * 0.78 * 2);
+}
+
+function getFallbackIconPath(resource: Pick<ResourceAmount, "kind" | "id">): string | undefined {
+  if (resource.kind !== "aspect") {
+    return undefined;
+  }
+
+  return NEI_TEXTURES.resolveThaumcraftAspectIconPath(resource.id);
+}
+
+function AtlasIconImage({
+  resource,
+  atlas,
+  iconPixelSize,
+  onReady,
+}: {
+  resource: Pick<ResourceAmount, "kind" | "id" | "displayName">;
+  atlas: ResourceIconAtlasRef;
+  iconPixelSize?: number;
+  onReady?: () => void;
+}) {
+  const positionX = getAtlasBackgroundPosition(atlas.x, atlas.atlasWidth, atlas.width);
+  const positionY = getAtlasBackgroundPosition(atlas.y, atlas.atlasHeight, atlas.height);
+  const [fitScale, setFitScale] = useState<number>();
+  useEffect(() => {
+    setFitScale(undefined);
+    if (resource.kind !== "item" && !onReady) return;
+    let active = true;
+    const image = new Image();
+    image.onload = () => {
+      if (!active) return;
+      if (resource.kind === "item") setFitScale(getSpriteFitScale(image, {
+        x: atlas.x, y: atlas.y, width: atlas.width, height: atlas.height,
+      }));
+      if (onReady) {
+        const decoded = image.decode ? image.decode() : Promise.resolve();
+        void decoded.then(() => { if (active) onReady(); }, () => {});
+      }
+    };
+    image.src = atlas.imagePath;
+    return () => {
+      active = false;
+    };
+  }, [resource.kind, atlas.imagePath, atlas.x, atlas.y, atlas.width, atlas.height, onReady]);
+
+  return (
+    <span
+      role="img"
+      aria-label={resourceLabel(resource)}
+      className={[
+        iconPixelSize
+          ? "minecraft-pixel-art block shrink-0 max-w-none"
+          : "minecraft-pixel-art block h-[calc(200%-8px)] w-[calc(200%-8px)] shrink-0 max-w-none",
+        RESOURCE_ART_SHADOW,
+      ].join(" ")}
+      style={{
+        ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),
+        ...spriteFitStyle(fitScale, iconPixelSize),
+      }}
+    >
+      <span
+        className="block h-full w-full bg-no-repeat"
+        style={{
+          backgroundImage: `url('${atlas.imagePath}')`,
+          backgroundSize: `${(atlas.atlasWidth / atlas.width) * 100}% ${(atlas.atlasHeight / atlas.height) * 100}%`,
+          backgroundPosition: `${positionX} ${positionY}`,
+          clipPath: resource.kind === "fluid" ? FLUID_SPRITE_CLIP : undefined,
+        }}
+      />
+    </span>
+  );
+}
+
+function getAtlasBackgroundPosition(offset: number, atlasSize: number, iconSize: number) {
+  const travel = atlasSize - iconSize;
+  if (travel <= 0) {
+    return "0%";
+  }
+
+  return `${(offset / travel) * 100}%`;
+}
+
+function AmountLabel({ resource }: { resource: Pick<ResourceAmount, "kind" | "amount"> }) {
+  const label = formatMinecraftAmount(resource.amount, resource.kind);
+  if (!label) {
+    return null;
+  }
+
+  const position =
+    resource.kind === "fluid" ? "bottom-0 left-0.5" : "bottom-0 right-0.5 text-right";
+  const style = getAmountLabelStyle(label, resource.kind);
+
+  return (
+    <span
+      className={[
+        "absolute max-w-[95%] whitespace-nowrap font-mono font-black text-white drop-shadow-[1px_1px_0_#000]",
+        position,
+      ].join(" ")}
+      style={style}
+    >
+      {label}
+    </span>
+  );
+}
+
+function getAmountLabelStyle(label: string, kind: ResourceKind): CSSProperties {
+  const length = label.length;
+  const fontSize = length <= 4 ? 10 : length <= 6 ? 8 : length <= 9 ? 6 : 5;
+  const scaleX = length <= 9 ? 1 : length <= 12 ? 0.9 : 0.78;
+  return {
+    fontSize,
+    lineHeight: `${fontSize}px`,
+    transform: scaleX === 1 ? undefined : `scaleX(${scaleX})`,
+    transformOrigin: kind === "fluid" ? "bottom left" : "bottom right",
+  };
+}
+
+function formatMinecraftAmount(amount: number, kind: ResourceKind): string | undefined {
+  if (kind === "item") {
+    if (amount === 1) {
+      return undefined;
+    }
+
+    return Number.isInteger(amount) ? formatNumberWithThousands(amount) : trimAmount(amount);
+  }
+
+  if (kind === "aspect") {
+    return trimAmount(amount);
+  }
+
+  return `${trimAmount(amount)}L`;
+}
+
+function trimAmount(amount: number): string {
+  if (Number.isInteger(amount)) {
+    return formatNumberWithThousands(amount);
+  }
+
+  return formatNumberWithThousands(trimTrailingDecimalZeros(amount.toFixed(2)));
+}

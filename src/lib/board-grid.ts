@@ -1,0 +1,126 @@
+/**
+ * The board grid.
+ *
+ * One number governs the whole canvas: the background pattern, the snap step,
+ * every card's width and height, and the vertical pitch of the port rows. If a
+ * card is a whole number of cells tall and sits on a cell corner, then every
+ * one of its ports lands on a grid line too — which is the point. Wires can
+ * then run along the same lines the cards are built from.
+ *
+ * The rules, in order of importance:
+ *
+ *  1. Node positions are multiples of `BOARD_GRID`.
+ *  2. Node widths and heights are multiples of `BOARD_GRID`.
+ *  3. A port row is `PORT_ROW_HEIGHT` tall (two cells), and the block above
+ *     the rails is a whole number of `HEAD_ROW_HEIGHT` (also two cells), so
+ *     port centres land on a grid line: head + 20 + 40i.
+ *
+ * Rule 3 is why the head, the footer and the config panels have fixed heights
+ * rather than sizing to their content: content sits inside a box whose height
+ * the grid sets.
+ */
+
+/** The cell. Everything on the board is a whole number of these. */
+export const BOARD_GRID = 20;
+
+/** Snap a scalar to the nearest grid line. */
+export function snapToGrid(value: number): number {
+  return Math.round(value / BOARD_GRID) * BOARD_GRID;
+}
+
+/** Snap a board position to the nearest cell corner. */
+export function snapPositionToGrid<T extends { x: number; y: number }>(position: T): T {
+  return { ...position, x: snapToGrid(position.x), y: snapToGrid(position.y) };
+}
+
+/** Grow a measurement to the next whole cell (never shrink — content must fit). */
+export function snapSizeUpToGrid(value: number): number {
+  return Math.max(BOARD_GRID, Math.ceil(value / BOARD_GRID) * BOARD_GRID);
+}
+
+/** `n` cells, in pixels. */
+export function cells(n: number): number {
+  return n * BOARD_GRID;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Card geometry — the sizes every node component builds itself out of.    */
+/* ---------------------------------------------------------------------- */
+
+/** The clean recipe card is this wide: 16 cells, the mod's 320 exactly (rails 112, picture 88, 4 inset each side). */
+export const RECIPE_NODE_WIDTH = cells(16); // 320
+
+/**
+ * The classic bevelled card (the fallback for cards the clean look has no design for yet) and a
+ * minimized board are 19 cells wide.
+ *
+ * The machine picture is the flex-1 middle between the two rails and must
+ * stay 96px, the size a structure render reads at; re-check it first if this
+ * width changes. The item chips and output coupling absorb width changes, and
+ * the price is the chip's 70px name column: names wrap to two lines and long
+ * ones clip on the second (the hover shows the whole name).
+ */
+export const CLASSIC_NODE_WIDTH = cells(19); // 380
+
+/** Card padding either side of the rails (inside the 2px frame). */
+export const RECIPE_NODE_PAD_X = 8;
+
+/** Inner width available to the classic card's rails after frame and padding. */
+export const RECIPE_RAIL_AREA_WIDTH = CLASSIC_NODE_WIDTH - 2 * (2 + RECIPE_NODE_PAD_X); // 360
+
+/** The input chip, and the chip half of an output row. */
+export const PORT_CHIP_WIDTH = 112;
+
+/** Chip + 2px gap + the 30px coupling (`.flow-plug` in globals.css). */
+export const OUTPUT_RAIL_WIDTH = PORT_CHIP_WIDTH + 2 + 30; // 144
+
+/** One port row. Two cells, so a rail of any length stays on the grid. */
+export const PORT_ROW_HEIGHT = cells(2); // 40
+
+/**
+ * The minimum height of the machine picture's window (the flex-1 middle
+ * between the rails, which grows with them). Two port rows, so the common
+ * one-input two-output card is not made taller by the picture.
+ *
+ * It must stay a whole number of CELLS or a short card lands off the grid.
+ */
+export const PICTURE_MIN_HEIGHT = PORT_ROW_HEIGHT * 2; // 80
+
+/** The title row. */
+export const HEAD_ROW_HEIGHT = cells(2); // 40
+
+/** One row of a machine-config panel (label over a dropdown). */
+export const CONFIG_PANEL_ROW_HEIGHT = cells(3); // 60
+
+/**
+ * Drawers and tanks: the mod's drawer, 116 x 48 (DrawerPaint.W, H): a bar to move it by over one port row to wire
+ * from. Not whole cells: the drawer sits on the grid by its corner, as the mod's does. Shared by
+ * placement, routing, and drag previews.
+ */
+export const STORAGE_NODE_WIDTH = 116;
+export const STORAGE_NODE_HEIGHT = 48;
+
+/** Trash cans, same tile. */
+export const TRASH_NODE_WIDTH = cells(4); // 80
+export const TRASH_NODE_HEIGHT = cells(4); // 80
+
+/**
+ * The board window: a pocket standing OPEN on its parent board. The title bar
+ * is one head row (two cells), so a frame on a cell corner keeps every member
+ * inside it on the grid — member positions are relative to the frame's
+ * top-left corner, not to the content area under the bar.
+ */
+export const BOARD_WINDOW_TITLE_HEIGHT = cells(2); // 40
+export const BOARD_WINDOW_DEFAULT_SIZE = { width: cells(24), height: cells(16) }; // 480×320
+export const BOARD_WINDOW_MIN_WIDTH = cells(10); // 200
+export const BOARD_WINDOW_MIN_HEIGHT = cells(6); // 120
+/** Air between the frame and the members fitted into it on expand. */
+export const BOARD_WINDOW_FIT_PAD = cells(1); // 20
+
+/** Default sizes for the annotation shapes, all whole cells. */
+export const ANNOTATION_DEFAULT_BOX = { width: cells(14), height: cells(9) }; // 280×180
+export const ANNOTATION_DEFAULT_TEXT = { width: cells(12), height: cells(4) }; // 240×80
+export const ANNOTATION_DEFAULT_ARROW = { width: cells(10), height: cells(1) }; // 200×20
+export const ANNOTATION_MIN_BOX = cells(2); // 40
+export const ANNOTATION_MIN_ARROW = cells(1); // 20
+export const ANNOTATION_MIN_TEXT = { width: cells(5), height: cells(2) }; // 100×40

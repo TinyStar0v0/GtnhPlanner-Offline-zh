@@ -1,0 +1,102 @@
+"use client";
+
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+
+import { ChevronDown, Factory, LogOut, ShieldCheck, User } from "lucide-react";
+import { useRef, useState } from "react";
+import { openLibrary } from "@/lib/library/library-tab";
+import { AuthForm, useCommunityUser } from "./auth";
+import { t } from "@/lib/i18n";
+
+
+/**
+ * Top-right account control: a Sign in button when logged out, a username
+ * menu when logged in.
+ */
+export function AccountMenu() {
+  const { user, isLoading, setUser, signOut } = useCommunityUser();
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  const [isAuthOpen, setAuthOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useDropdownDismiss(isMenuOpen, { refs: [menuRef], onClose: () => setMenuOpen(false), fade: true });
+
+  if (isLoading) {
+    return <div className="h-5 w-20 animate-pulse rounded bg-surface-sunken" aria-hidden />;
+  }
+
+  if (!user) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setAuthOpen(true)}
+          className="inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-line-strong bg-surface px-2.5 font-medium text-fg hover:bg-surface-raised"
+        >
+          <User className="h-3.5 w-3.5" /> {t("Sign in")}</button>
+        {isAuthOpen ? (
+          <div
+            className="fixed inset-0 z-[110] grid place-items-center bg-neutral-950/50 p-4"
+            onClick={() => setAuthOpen(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded border border-line-strong bg-surface p-4 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 className="mb-1 text-base font-semibold">{t("Community account")}</h2>
+              <p className="mb-3 text-xs text-fg-muted">
+                {t("Just a username and password. Needed to share plans and manage your posts.")}</p>
+              <AuthForm
+                onSignedIn={(signedInUser) => {
+                  setUser(signedInUser);
+                  setAuthOpen(false);
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-expanded={isMenuOpen}
+        className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-line-strong bg-surface px-2.5 font-medium text-fg hover:bg-surface-raised"
+      >
+        {user.isAdmin ? (
+          <ShieldCheck className="h-3.5 w-3.5 text-cyan-500" />
+        ) : (
+          <User className="h-3.5 w-3.5" />
+        )}
+        <span className="max-w-32 truncate">{user.username}</span>
+        <ChevronDown className="h-3 w-3 text-fg-muted" />
+      </button>
+      {isMenuOpen ? (
+        <div className="absolute right-0 top-full mt-1 z-[110] min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              openLibrary({ kind: "all" });
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
+          >
+            <Factory className="h-3.5 w-3.5 text-fg-muted" /> {t("My setups")}</button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              void signOut();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
+          >
+            <LogOut className="h-3.5 w-3.5 text-fg-muted" /> {t("Sign out")}</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

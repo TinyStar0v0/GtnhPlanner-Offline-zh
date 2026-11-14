@@ -1,0 +1,90 @@
+name: Bug report
+description: Something in the planner is broken, missing, or behaves oddly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The more of the below you fill in, the
+        faster it can be fixed. If you are unsure about a field, skip it.
+
+        Machine rates are still being worked on. Multiblocks have a lot of
+        edge cases, and reports like yours are how the wrong ones get found,
+        so send it even if you are not certain.
+
+  - type: input
+    id: version
+    attributes:
+      label: Planner version
+      description: The `v` chip in the top left of the planner. It should already be filled in if you came from the bug button.
+      placeholder: "1.22.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: pack
+    attributes:
+      label: Which pack version were you planning against?
+      description: The picker next to the planner version in the header.
+      options:
+        - Stable
+        - Daily
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+      placeholder: |
+        I dragged a wire from the Coke Oven output to a drawer and the wire
+        vanished. I expected it to connect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can it be reproduced?
+      description: The steps someone else would follow to see the same thing.
+      placeholder: |
+        1. Open a fresh board
+        2. Add a Coke Oven from the recipe book
+        3. Drag from the Creosote output slot
+        4. Drop on empty board
+    validations:
+      required: true
+
+  - type: input
+    id: shared
+    attributes:
+      label: Link to a published setup or pocket
+      description: |
+        The fastest way for someone to see exactly what you see. Publish your
+        setup or pocket from the sidebar, then paste the link here.
+      placeholder: "https://gtnhplanner.com/?plan=..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: Your plan and screenshots
+      description: |
+        Drag files straight into this box. Exporting your plan as PNG or JSON
+        (the download button in the header) is the single most useful thing
+        you can attach: the exported image carries the whole board inside it,
+        so it can be opened and the bug reproduced exactly as you had it.
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: "Chrome 141, Firefox 145, Safari 18"
+    validations:
+      required: false

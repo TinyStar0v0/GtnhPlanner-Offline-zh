@@ -1,0 +1,546 @@
+import { CROP_FARM_PLACEHOLDER_RECIPE_ID, createCropFarmPlaceholderRecipe } from "./passive-production";
+import { getFusionMachine, getFusionRecipeMark, isFusionRecipe, normalizeFusionHandler } from "@/lib/machines/fusion";
+import { TGS_MACHINE_TYPE, tgsEuPerTick } from "@/lib/machines/tree-growth-simulator";
+import type {
+  FactoryNode,
+  MachineConfigControl,
+  MachineConfigTierOption,
+  MachineHandler,
+  Recipe,
+} from "./types";
+import {
+  getMachineBehaviour,
+  getMachineHiddenControlIds,
+  getMachineTableControls,
+  machineTableSeedsFromBase,
+} from "@/lib/machines/machine-table";
+
+export interface MachineConfigTierControl {
+  id: string;
+  label: string;
+  numeric?: MachineConfigControl["numeric"];
+  minimum: MachineConfigTierOption;
+  current: MachineConfigTierOption;
+  tiers: MachineConfigTierOption[];
+  /**
+   * Position of `minimum` in the control's FULL ladder. `tiers` starts at the
+   * minimum, so formulas that read a tier's position on the whole ladder (4
+   * parallels per field restriction coil tier) add this to the index within
+   * `tiers`.
+   */
+  minimumIndex: number;
+  resource: MachineConfigTierOption["resource"];
+}
+
+export function expandMachineRecipeVariants(recipes: Recipe[]): Recipe[] {
+  return recipes;
+}
+
+export function getRecipeMachineHandlers(
+  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
+): MachineHandler[] {
+  // Dataset handler lists are authoritative and always start with the map's
+  // primary machine. Synthesizing an extra entry from the recipe map name
+  // would duplicate it under the category name ("Blast Furnace" next to the
+  // real Electric Blast Furnace), so the fallback only exists for recipes
+  // without exported handlers.
+  if (recipe.id === CROP_FARM_PLACEHOLDER_RECIPE_ID && !recipe.machineHandlers?.length) {
+    return createCropFarmPlaceholderRecipe().machineHandlers!;
+  }
+  const handlersByFamily = new Map<string, MachineHandler>();
+  const fusionMark = isFusionRecipe(recipe) ? getFusionRecipeMark(recipe) : undefined;
+  for (const handler of recipe.machineHandlers ?? []) {
+    const normalized = normalizeFusionHandler(normalizeMachineHandler(handler), recipe);
+    const fusion = getFusionMachine(normalized.machineType);
+    if (fusion && fusionMark !== undefined && fusion.mark < fusionMark) continue;
+    const familyId = `${normalized.kind ?? "single"}:${slug(normalized.label)}`;
+    if (!handlersByFamily.has(familyId)) {
+      handlersByFamily.set(familyId, normalized);
+    }
+  }
+  if (handlersByFamily.size > 0) {
+    return [...handlersByFamily.values()];
+  }
+  // A future recipe outside every known reactor's capacity stays visibly
+  // blocked; do not turn it into a generic machine with ordinary overclocks.
+  if (isFusionRecipe(recipe) && recipe.machineHandlers?.length) {
+    return recipe.machineHandlers.map((handler) => normalizeFusionHandler(handler, recipe));
+  }
+
+  const baseMachineType = machineHandlerFamilyLabel(recipe.machineType);
+  const fallback: MachineHandler = {
+    id: slug(baseMachineType),
+    label: baseMachineType,
+    machineType: baseMachineType,
+    minimumTier: recipe.minimumTier,
+    kind: "single",
+  };
+  if (isHandCraftingRecipeMap(recipe)) {
+    return [autoWorkbenchHandler(), fallback];
+  }
+  return [normalizeFusionHandler(fallback, recipe)];
+}
+
+/** Whether this recipe comes off the crafting-grid maps the oracle exports. */
+export function isHandCraftingRecipeMap(recipe: Pick<Recipe, "machineType" | "source">): boolean {
+  const normalized = normalizeRecipeMapName(recipeMapName(recipe));
+  return normalized === "shaped crafting" || normalized === "shapeless crafting";
+}
+
+/**
+ * The machine that runs crafting-grid recipes: GT++'s Electric Auto Workbench
+ * (MTEElectricAutoWorkbench, tiers LV through UV). Its dataset recipes carry
+ * no handlers, so the two choices are synthesized here: the Auto Workbench
+ * first, because it is the machine a plan actually places, with the crafting
+ * table's instant hand-craft still offered behind it. In normal crafting mode
+ * the machine bills a flat 2048 EU per craft and takes its power at the
+ * tier's voltage, so the LV seed is 2048/32 = 64 ticks at 32 EU/t; the
+ * machine table's "Auto Workbench" entry supplies the perfect overclock that
+ * keeps energy per craft constant up the tiers, capped at EV's one craft per
+ * tick.
+ */
+export const AUTO_WORKBENCH_HANDLER_ID = "auto-workbench";
+
+function autoWorkbenchHandler(): MachineHandler {
+  return {
+    id: AUTO_WORKBENCH_HANDLER_ID,
+    label: "Auto Workbench",
+    machineType: "Auto Workbench",
+    minimumTier: "LV",
+    kind: "single",
+    durationTicks: 64,
+    eut: 32,
+  };
+}
+
+/**
+ * Steam-line machines: they consume steam, never EU. Audited against all 836
+ * exported catalysts: every machine named "Steam ..." or "High Pressure ..."
+ * is a steam MTE without a Voltage IN tooltip line, and no EU machine
+ * matches either pattern ("High Pressure Alloy Smelter" is the one steam
+ * machine that omits the word steam).
+ */
+export function isSteamMachineHandler(handler: Pick<MachineHandler, "label">): boolean {
+  return /\bsteam\b/i.test(handler.label) || /\bhigh pressure\b/i.test(handler.label);
+}
+
+/** The steel-cased half of the steam line: twice the speed, twice the steam. */
+export function isHighPressureSteamHandler(handler: Pick<MachineHandler, "label">): boolean {
+  return /\bhigh pressure\b/i.test(handler.label);
+}
+
+/**
+ * GT's fixed furnace recipe. The dataset exports smelting off the vanilla map
+ * (200 ticks, 0 EU), but every GT furnace actually runs this instead - the
+ * Electric Furnace handler carries these numbers as absolute stats, and the
+ * steam furnaces' math below seeds from them too.
+ */
+export const GT_FURNACE_RECIPE_TICKS = 128;
+export const GT_FURNACE_RECIPE_EUT = 4;
+
+/** Whether this recipe is vanilla-map smelting (see GT_FURNACE_RECIPE_TICKS). */
+export function isSmeltingRecipeMap(recipe: Pick<Recipe, "machineType" | "source">): boolean {
+  return /^(?:smelting|furnace)$/i.test(recipeMapName(recipe).trim());
+}
+
+/**
+ * Steam singleblocks run the LV recipe on borrowed math the dataset does not
+ * carry: SteamOverclockDescriber gives a bronze machine (x1 EU, x2 duration)
+ * and a high pressure one (x2 EU, x1 duration). Their handlers export no
+ * durationTicks of their own; without this a bronze machine would run at the
+ * LV duration, twice its real speed.
+ */
+function steamSingleblockDurationTicks(
+  recipe: Pick<Recipe, "machineType" | "source" | "durationTicks">,
+  handler: MachineHandler,
+): number | undefined {
+  if (handler.kind === "multiblock" || !isSteamMachineHandler(handler)) {
+    return undefined;
+  }
+  const base = isSmeltingRecipeMap(recipe) ? GT_FURNACE_RECIPE_TICKS : recipe.durationTicks;
+  return isHighPressureSteamHandler(handler) ? base : base * 2;
+}
+
+/**
+ * The fixed cycle of a machine that never reads its recipe's duration (the
+ * Extreme Heat Exchanger's 20 ticks). Its recipe amounts are per cycle, so
+ * this replaces every duration the recipe or a handler states.
+ */
+export function machineCycleTicks(machineType: string | undefined): number | undefined {
+  return getMachineBehaviour(machineType)?.cycleTicks;
+}
+
+export function getSelectedMachineHandler(
+  recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
+  node: Pick<FactoryNode, "machineHandlerId">,
+): MachineHandler {
+  const handlers = getRecipeMachineHandlers(recipe);
+  return handlers.find((handler) => handler.id === node.machineHandlerId) ?? handlers[0];
+}
+
+export function applyMachineHandlerToRecipe(
+  recipe: Recipe,
+  node: Pick<FactoryNode, "machineHandlerId">,
+): Recipe {
+  // Power cards (src/lib/power) bake their whole model into the synthesized
+  // recipe; no handler math may touch them. Without this, a generator named
+  // "... Steam Turbine" matched the steam-singleblock pattern and ran at
+  // bronze-machine half speed.
+  if (recipe.power) {
+    return recipe;
+  }
+  const handlers = getRecipeMachineHandlers(recipe);
+  const handler = handlers.find((entry) => entry.id === node.machineHandlerId) ?? handlers[0];
+  const machineConfigControls = handler.machineConfigControls ?? recipe.machineConfigControls;
+  // Oracle runtime variants are computed in-game for the recipe map's
+  // default machine; a different selected machine must fall back to the
+  // static overclock math seeded with the handler's own duration/EU.
+  const runtimeCalculation = handler.id === handlers[0].id ? recipe.runtimeCalculation : undefined;
+  // The curated table states speed and power against the recipe map's base
+  // numbers, while the dataset bakes its scraped multipliers into each
+  // handler's own durationTicks/eut (a Volcanus handler carries the EBF
+  // recipe pre-multiplied by x0.8 duration and x0.9 EU). Keeping both applies
+  // the bonus twice, so a handler whose machine the table covers seeds from
+  // the base recipe instead.
+  const seedsFromBase = machineTableSeedsFromBase(handler.machineType);
+  const minimumTier = getMachineBehaviour(handler.machineType)?.recipeTierFromBase
+    ? recipe.minimumTier : handler.minimumTier;
+  const handlerDurationTicks = machineCycleTicks(handler.machineType) ?? (seedsFromBase
+    ? steamSingleblockDurationTicks(recipe, handler)
+    : (handler.durationTicks ?? steamSingleblockDurationTicks(recipe, handler)));
+  const handlerEut = seedsFromBase ? undefined : handler.eut;
+  // Steam machines burn steam, not EU. Their handlers carry no EU override,
+  // so without this they would inherit the electric recipe's EU draw and the
+  // planner would bill phantom power for them. The litres they do burn are
+  // billed by getNodeSteamReport in power-report.ts.
+  // The Tree Growth Simulator's NEI page says 0 EU/t, but the machine draws VP[t] and needs LV at least
+  // (tree-growth-simulator.ts): its card offers voltage and power like any electric machine.
+  const tgs = handler.machineType === TGS_MACHINE_TYPE;
+  const eut = tgs ? tgsEuPerTick(1) : isSteamMachineHandler(handler) ? 0 : (handlerEut ?? recipe.eut);
+  return {
+    ...recipe,
+    runtimeCalculation,
+    machineType: handler.machineType,
+    minimumTier: tgs ? "LV" : minimumTier,
+    maximumTier: handler.maximumTier,
+    availableTiers: handler.availableTiers,
+    durationTicks: handlerDurationTicks ?? recipe.durationTicks,
+    eut,
+    machineConfigControls,
+    machineProfile: {
+      ...recipe.machineProfile,
+      machineType: handler.machineType,
+      minimumTier,
+      maximumTier: handler.maximumTier,
+      availableTiers: handler.availableTiers,
+      durationTicks: handlerDurationTicks ?? recipe.machineProfile?.durationTicks,
+      eut: handlerEut ?? recipe.machineProfile?.eut,
+      maxParallel: handler.maxParallel ?? recipe.machineProfile?.maxParallel,
+      eutLimit: handler.eutLimit ?? recipe.machineProfile?.eutLimit,
+      perfectOverclock: handler.perfectOverclock ?? recipe.machineProfile?.perfectOverclock,
+      kind: handler.kind ?? recipe.machineProfile?.kind,
+      notes: handler.notes ?? recipe.machineProfile?.notes,
+    },
+  };
+}
+
+export function getRecipeCoilTierControl(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: { coilTier?: string },
+) {
+  // The coil rides its own legacy path around dropHiddenControls, so the
+  // table's hidesControls must be honoured here too - the Large Chemical
+  // Reactor's structural coil is any tier and does nothing at runtime.
+  if (getMachineHiddenControlIds(recipe.machineType).includes("heatingCoil")) {
+    return undefined;
+  }
+  const control =
+    getMachineTableControls(recipe.machineType).find((entry) => entry.id === "heatingCoil") ??
+    findMachineConfigControl(recipe, "heatingCoil");
+  return control ? resolveMachineConfigTierControl(applyControlRecipeMinimum(control, recipe), node.coilTier) : undefined;
+}
+
+export function getRecipeMachineConfigTierControls(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "machineConfigTiers">,
+): MachineConfigTierControl[] {
+  const settings = getMachineBehaviour(recipe.machineType)?.normalizeConfig?.(node.machineConfigTiers ?? {})
+    ?? node.machineConfigTiers;
+  const controls = dropHiddenControls(
+    mergeMachineConfigControls(
+      recipe.machineConfigControls ?? [],
+      getMachineTableControls(recipe.machineType, recipe as Partial<Recipe>),
+    ),
+    recipe.machineType,
+  );
+
+  return controls
+    .filter((control) => control.id !== "heatingCoil")
+    .map((control) =>
+      resolveMachineConfigTierControl(
+        applyControlRecipeMinimum(control, recipe),
+        settings?.[control.id],
+      ),
+    )
+    .filter((control): control is MachineConfigTierControl => Boolean(control));
+}
+
+/**
+ * The curated machine table wins over anything the dataset scraped, and adds
+ * knobs the dataset has no control for at all. Dataset controls the table does
+ * not mention are kept, so a machine can be partly covered.
+ */
+function mergeMachineConfigControls(
+  fromDataset: MachineConfigControl[],
+  fromTable: MachineConfigControl[],
+): MachineConfigControl[] {
+  if (fromTable.length === 0) {
+    return fromDataset;
+  }
+
+  const tableIds = new Set(fromTable.map((control) => control.id));
+  return [...fromDataset.filter((control) => !tableIds.has(control.id)), ...fromTable];
+}
+
+function dropHiddenControls(
+  controls: MachineConfigControl[],
+  machineType: string | undefined,
+): MachineConfigControl[] {
+  const hidden = getMachineHiddenControlIds(machineType);
+  return hidden.length === 0
+    ? controls
+    : controls.filter((control) => !hidden.includes(control.id));
+}
+
+/** A typed number, snapped to the knob's step (whole numbers by default) and clamped. */
+export function snapNumericSetting(
+  value: number,
+  numeric: NonNullable<MachineConfigControl["numeric"]>,
+): number {
+  const { min, max = Number.MAX_SAFE_INTEGER, step } = numeric;
+  const snapped = step ? Number((Math.round(value / step) * step).toFixed(6)) : Math.trunc(value);
+  return Math.min(max, Math.max(min, snapped));
+}
+
+export function getAdjacentMachineConfigTier(
+  control: MachineConfigTierControl,
+  direction: -1 | 1,
+): string {
+  if (control.numeric) {
+    return String(
+      snapNumericSetting(
+        Number(control.current.key) + direction * (control.numeric.step ?? 1),
+        control.numeric,
+      ),
+    );
+  }
+  const currentIndex = control.tiers.findIndex((entry) => entry.key === control.current.key);
+  const minimumIndex = control.tiers.findIndex((entry) => entry.key === control.minimum.key);
+  const nextIndex = Math.min(
+    control.tiers.length - 1,
+    Math.max(Math.max(0, minimumIndex), currentIndex + direction),
+  );
+  return control.tiers[nextIndex]?.key ?? control.current.key;
+}
+
+export function getRecipeSpecialValue(recipe: Pick<Recipe, "nei">): number | undefined {
+  for (const entry of recipe.nei?.additionalInfo ?? []) {
+    const match = /special\s+value\s*:\s*(-?\d+)/i.exec(entry);
+    if (match) {
+      return Number.parseInt(match[1], 10);
+    }
+  }
+
+  return undefined;
+}
+
+function findMachineConfigControl(
+  recipe: Pick<Recipe, "machineConfigControls">,
+  id: string,
+): MachineConfigControl | undefined {
+  return recipe.machineConfigControls?.find((control) => control.id === id);
+}
+
+/**
+ * A control whose minimum tier is the recipe's own special value: the recipe
+ * says which rung of the ladder it starts at (an NFR recipe's minimum field
+ * restriction coil), so the control's static `minimumKey` is replaced with
+ * that tier before resolution hides the rungs below it. Heat-based controls
+ * instead select the first coil meeting the special value in K.
+ */
+function applyControlRecipeMinimum(
+  control: MachineConfigControl,
+  recipe: Pick<Recipe, "nei">,
+): MachineConfigControl {
+  if (!control.minimumFromSpecialValue && !control.minimumHeatFromSpecialValue) {
+    return control;
+  }
+  const specialValue = getRecipeSpecialValue(recipe);
+  if (specialValue === undefined || specialValue < 1) {
+    return control;
+  }
+  const minimum = control.minimumHeatFromSpecialValue
+    ? control.tiers.find((tier) => (tier.heat ?? 0) >= specialValue)
+    : control.tiers[Math.min(control.tiers.length, Math.floor(specialValue)) - 1];
+  return minimum ? { ...control, minimumKey: minimum.key } : control;
+}
+
+function resolveMachineConfigTierControl(
+  control: MachineConfigControl,
+  selectedKey: string | undefined,
+): MachineConfigTierControl | undefined {
+  const minimum = control.tiers.find((tier) => tier.key === control.minimumKey) ?? control.tiers[0];
+  if (!minimum) {
+    return undefined;
+  }
+
+  if (control.numeric) {
+    const raw = Number(selectedKey?.trim() || control.defaultKey || control.minimumKey);
+    const value = Number.isFinite(raw)
+      ? snapNumericSetting(raw, control.numeric)
+      : control.numeric.min;
+    const current = {
+      ...minimum,
+      key: String(value),
+      label: String(value),
+      resource: { ...minimum.resource, displayName: `${control.label}: ${value}` },
+    };
+    return { id: control.id, label: control.label, numeric: control.numeric,
+      minimum, current, tiers: [current], minimumIndex: 0, resource: current.resource };
+  }
+
+  const minimumIndex = Math.max(
+    0,
+    control.tiers.findIndex((tier) => tier.key === minimum.key),
+  );
+  const tiers = control.tiers.slice(minimumIndex);
+  const selected = tiers.find((tier) => tier.key === selectedKey);
+  const defaultTier = tiers.find((tier) => tier.key === control.defaultKey);
+  const current = selected ?? defaultTier ?? minimum;
+
+  return {
+    id: control.id,
+    label: control.label,
+    minimum,
+    current,
+    tiers,
+    minimumIndex,
+    resource: current.resource,
+  };
+}
+
+export function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): string {
+  return recipe.source?.recipeMap ?? recipe.machineType;
+}
+
+function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
+  // Controller names are identities, not singleblock voltage aliases: Ore
+  // Washing Plant is distinct from Ore Washer, and fusion numerals name
+  // different reactors. Preserve explicit multiblocks before family folding.
+  if (handler.kind === "multiblock" || getFusionMachine(handler.machineType)) return handler;
+  const familyLabel = machineHandlerFamilyLabel(handler.label);
+  return {
+    ...handler,
+    label: familyLabel,
+    machineType: machineHandlerFamilyLabel(handler.machineType),
+  };
+}
+
+function machineHandlerFamilyLabel(label: string): string {
+  if (getFusionMachine(label)) return label;
+  const tierlessLabel = label
+    .replace(/\s+\((?:ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\)$/i, "")
+    .replace(/\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, "")
+    .trim();
+  const directAlias = MACHINE_HANDLER_FAMILY_ALIASES.get(normalizeMachineLabel(tierlessLabel));
+  if (directAlias) {
+    return directAlias;
+  }
+
+  const familyLabel = tierlessLabel
+    .replace(/^(?:Basic|Advanced|Elite|Ultimate|Epic|MAX|Turbo|Quick|Instant|Universal)\s+/i, "")
+    .trim();
+  return MACHINE_HANDLER_FAMILY_ALIASES.get(normalizeMachineLabel(familyLabel)) ?? familyLabel;
+}
+
+const MACHINE_HANDLER_FAMILY_ALIASES = new Map([
+  ["alloy integrator", "Alloy Smelter"],
+  ["amplifabricator", "Matter Amplifier"],
+  ["amplicreator", "Matter Amplifier"],
+  ["assembling machine", "Assembler"],
+  ["assembly constructor", "Assembler"],
+  ["atom stimulator", "Electric Furnace"],
+  ["blaze sweatshop t-6350", "Thermal Centrifuge"],
+  ["can operator", "Canner"],
+  ["centrifuge", "Centrifuge"],
+  ["chemical dunktron", "Chemical Bath"],
+  ["chemical perforer", "Chemical Reactor"],
+  ["chemical performer", "Chemical Reactor"],
+  ["circuit assembling machine", "Circuit Assembler"],
+  // "Just a Furnace with a different Design" per its own tooltip; the Ore
+  // Washer mapping was a slip that only surfaced once smelting recipes
+  // started carrying furnace machine handlers.
+  ["electric oven", "Electric Furnace"],
+  ["electron excitement processor", "Electric Furnace"],
+  ["exact photon cannon", "Laser Engraver"],
+  ["extractinator", "Extractor"],
+  ["fermentation hastener", "Fermenter"],
+  ["fire cyclone", "Thermal Centrifuge"],
+  ["fluid petrificator", "Fluid Solidifier"],
+  ["fraction splitter", "Distillery"],
+  ["heat infuser", "Fluid Heater"],
+  ["impact modulator", "Forge Hammer"],
+  ["ionizer", "Electrolyzer"],
+  ["liquid can actuator", "Fluid Canner"],
+  ["liquefying sucker", "Fluid Extractor"],
+  ["magnetar separator", "Electromagnetic Separator"],
+  ["magnetism inducer", "Electromagnetic Polarizer"],
+  ["matter constrictor", "Compressor"],
+  ["matter organizer", "Mixer"],
+  ["molecular cyclone", "Centrifuge"],
+  ["molecular disintegrator e-4908", "Electrolyzer"],
+  ["molecular separator", "Centrifuge"],
+  ["molecular tornado", "Centrifuge"],
+  ["object divider", "Cutting Machine"],
+  ["oblitterator", "Recycler"],
+  ["ore washing machine", "Ore Washer"],
+  ["ore washing plant", "Ore Washer"],
+  ["polarizer", "Electromagnetic Polarizer"],
+  ["precision laser engraver", "Laser Engraver"],
+  ["pressure cooker", "Autoclave"],
+  ["pulsation filter", "Sifter"],
+  ["pulverizer", "Macerator"],
+  ["repurposed laundry-washer i-360", "Ore Washer"],
+  ["scrap-o-matic", "Recycler"],
+  ["shape driver", "Extruder"],
+  ["shape eliminator", "Macerator"],
+  ["short circuit heater", "Arc Furnace"],
+  ["sifting machine", "Sifter"],
+  ["singularity compressor", "Compressor"],
+  ["surface shifter", "Forming Press"],
+  ["the oblitterator", "Recycler"],
+  ["turn-o-matic", "Lathe"],
+  ["ufo engine", "Microwave"],
+  ["unboxinator", "Unpackager"],
+  ["vacuum extractor", "Extractor"],
+  ["wire transfigurator", "Wiremill"],
+]);
+
+function slug(value: string): string {
+  return normalizeRecipeMapName(value).replace(/[^a-z0-9]+/g, "-");
+}
+
+function normalizeMachineLabel(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeRecipeMapName(recipeMap: string): string {
+  return recipeMap
+    .trim()
+    .toLowerCase()
+    .replace(/\brecipes?\b/g, "")
+    .replace(/\brecipe\s+map\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
