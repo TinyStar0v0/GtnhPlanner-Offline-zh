@@ -1,4 +1,4 @@
-﻿GTNH Planner 中文自用版 v1.1.0 —— 免安装包
+GTNH Planner 中文自用版 v1.1.0 —— 免安装包
 ================================================
 
 这个包双击就能用，不需要提前装 Node.js。
@@ -7,7 +7,7 @@
 
 一、首次使用
 ------------
-如果解压后是「GtnhplannerWeb-offline-zh-1.2.x 里面还有一个同名文件夹」，
+如果解压后是「Gtnh-factory-flow-Offline-zh-1.2.x 里面还有一个同名文件夹」，
 进到里面那个文件夹（能看到 start.cmd / setup.cmd 的那一层）再双击。
 
 1. 双击  setup.cmd
