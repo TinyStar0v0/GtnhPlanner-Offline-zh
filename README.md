@@ -17,6 +17,22 @@
 
 想看到完整报错：在文件夹的地址栏输入 `cmd` 回车，再执行 `start.cmd`，窗口就不会关。
 每次启动的诊断也都会写进 `scratch\logs\start.log`。
+## 从旧版本升级（数据不用重下）
+
+| 情况 | 做法 |
+|---|---|
+| 已有安装，换新版本 | 下载 `GtnhplannerWeb-update-zh-<版本>.zip`，解压后执行<br>`powershell -ExecutionPolicy Bypass -File scripts\tools\apply-update.ps1 -Target "<安装目录>"` |
+| 新版本解压到了新目录 | 用 `scripts\tools\migrate-install.ps1 -From <旧目录> -To <新目录>` 把数据搬过去 |
+
+`apply-update.ps1` 会：停服务 → 把旧文件备份到 `<安装目录>\.backup\<时间>` → 覆盖新代码 →
+`package.json` 变了才重装依赖。**配方、图标、`node_modules`、浏览器里的方案和设置都不动。**
+
+`migrate-install.ps1` 默认搬 `public\datasets`（配方 + 5.7 万张图标）和 `.tools`（便携 Node），
+加 `-IncludeDeps` 连 `node_modules` 一起搬。搬完在新目录跑一次 `setup.cmd` 补齐依赖即可。
+
+方案和设置存在浏览器里（按 `127.0.0.1:3100` 这个站点），换版本、换目录都不影响。
+换数据集后打开方案时，配方会按内容自动重新匹配到新版本。
+
 ## 数据自动更新（每日构筑）
 
 本地的配方数据是**快照**：上游 [gtnhplanner.com](https://gtnhplanner.com) 发布新版本后，

@@ -1,0 +1,44 @@
+GTNH Planner 中文自用版 —— 更新包
+================================
+
+这个包用来把已有安装升到新版本，**不会动你的数据**：
+配方、图标、节点依赖、浏览器里的方案和设置都保留。
+
+一、怎么更新（推荐：直接覆盖）
+------------------------------
+1. 解压这个包到任意位置
+2. 打开 PowerShell（开始菜单搜 PowerShell），执行：
+
+   powershell -ExecutionPolicy Bypass -File "<解压目录>\scripts\tools\apply-update.ps1" -Target "<你的安装目录>"
+
+   例如：
+   powershell -ExecutionPolicy Bypass -File "D:\下载\GtnhplannerWeb-update-zh-1.4.0\scripts\tools\apply-update.ps1" -Target "D:\gtnhplanner"
+
+   不知道安装目录？就是有 start.cmd 的那个文件夹。
+
+3. 脚本会：停服务 → 备份旧代码到 <安装目录>\.backup\时间 → 覆盖新代码 → 依赖有变化时重装
+4. 双击安装目录里的 start.cmd 启动
+
+二、如果新版本是解压到新目录的
+------------------------------
+用迁移脚本，把旧目录的数据搬过去：
+
+   powershell -ExecutionPolicy Bypass -File "scripts\tools\migrate-install.ps1" -From "D:\gtnhplanner-old" -To "D:\gtnhplanner-new"
+
+默认搬 public\datasets（配方+图标）和 .tools（便携 Node）；加 -IncludeDeps 连 node_modules 一起搬。
+搬完在新目录双击 setup.cmd（会跳过已下载的数据）或直接 start.cmd。
+
+三、数据版本升级（配方更新到新数据集）
+--------------------------------------
+网页里的方案存的是配方，换数据集后会自动按内容重新匹配（打开方案时完成）。
+需要主动拉新数据集时：
+
+   update.cmd           检查 + 下载（有新版本才下）
+   update.cmd --check   只检查
+
+浏览器里的方案和设置按站点（127.0.0.1:3100）保存在本机，换版本、换目录都不影响。
+
+四、出问题怎么回退
+------------------
+apply-update.ps1 覆盖前会把旧文件备份到 <安装目录>\.backup\<时间>\，
+把里面的文件拷回安装目录即可回到更新前。
