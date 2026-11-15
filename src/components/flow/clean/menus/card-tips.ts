@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { useMemo } from "react";
 import type { FactoryNode, Recipe } from "@/lib/model/types";
 import {
@@ -93,16 +94,16 @@ export function machineNameTip(view: CleanCardView, f: CardTipFacts): TipSpec {
   ];
   if (view.count.pinned)
     tip.push({ label: PIN_RULE_LABEL[view.count.rule], value: `×${view.count.setText}` });
-  if (f.shared) tip.push({ label: "Recipes", value: String(f.recipes) });
-  if (view.tier && !f.steam) tip.push({ label: "Configured tier", value: view.tier.label });
-  tip.push({ label: "Time per operation", value: seconds(f.seconds) });
+  if (f.shared) tip.push({ label: t("Recipes"), value: String(f.recipes) });
+  if (view.tier && !f.steam) tip.push({ label: t("Configured tier"), value: view.tier.label });
+  tip.push({ label: t("Time per operation"), value: seconds(f.seconds) });
   tip.push(
     f.steam
-      ? { label: "Steam per machine", value: `${formatCompact(f.drawPerMachine)} L/s` }
-      : { label: "Draw per machine", value: `${formatCompact(f.drawPerMachine)} EU/t` },
+      ? { label: t("Steam per machine"), value: `${formatCompact(f.drawPerMachine)} L/s` }
+      : { label: t("Draw per machine"), value: `${formatCompact(f.drawPerMachine)} EU/t` },
   );
   if (f.parallels > 1)
-    tip.push({ label: "Parallel operations", value: String(Math.round(f.parallels)) });
+    tip.push({ label: t("Parallel operations"), value: String(Math.round(f.parallels)) });
   return {
     id: `${view.nodeId}|name`,
     title: view.name,
@@ -115,7 +116,7 @@ export function machineNameTip(view: CleanCardView, f: CardTipFacts): TipSpec {
             input: "left",
             label: f.shared ? "Machines that run them all" : "Machines that run it",
           },
-          { input: "wheel", label: "Next machine" },
+          { input: "wheel", label: t("Next machine") },
         ]
       : [],
   };
@@ -123,11 +124,11 @@ export function machineNameTip(view: CleanCardView, f: CardTipFacts): TipSpec {
 
 export function tierChipTip(view: CleanCardView, f: CardTipFacts): TipSpec {
   const tier = view.tier!;
-  const rows: NonNullable<TipSpec["rows"]> = [{ label: "Configured tier", value: tier.label }];
+  const rows: NonNullable<TipSpec["rows"]> = [{ label: t("Configured tier"), value: tier.label }];
   if (f.recipeTier && f.recipeTier !== "NONE")
-    rows.push({ label: "Recipe tier", value: f.recipeTier });
-  rows.push({ label: "Time per operation", value: seconds(f.seconds) });
-  rows.push({ label: "Draw per machine", value: `${formatCompact(f.drawPerMachine)} EU/t` });
+    rows.push({ label: t("Recipe tier"), value: f.recipeTier });
+  rows.push({ label: t("Time per operation"), value: seconds(f.seconds) });
+  rows.push({ label: t("Draw per machine"), value: `${formatCompact(f.drawPerMachine)} EU/t` });
   return {
     id: `${view.nodeId}|tier`,
     title: tier.fixed ? "Fusion reactor power" : "Voltage tier",
@@ -138,9 +139,9 @@ export function tierChipTip(view: CleanCardView, f: CardTipFacts): TipSpec {
     actions: tier.fixed
       ? []
       : [
-          { input: "left", label: "Up" },
-          { input: "right", label: "Down" },
-          { input: "wheel", label: "Step" },
+          { input: "left", label: t("Up") },
+          { input: "right", label: t("Down") },
+          { input: "wheel", label: t("Step") },
         ],
   };
 }
@@ -151,19 +152,19 @@ export function powerRowTip(view: CleanCardView, f: CardTipFacts): TipSpec {
   return f.steam
     ? {
         id: `${view.nodeId}|power`,
-        title: "Steam",
+        title: t("Steam"),
         rows: [
-          { label: "Steam per machine", value: `${formatCompact(f.drawPerMachine)} L/s` },
-          { label: "Steam for this card", value: demand },
+          { label: t("Steam per machine"), value: `${formatCompact(f.drawPerMachine)} L/s` },
+          { label: t("Steam for this card"), value: demand },
         ],
         notes: [{ text: "Not wired in plans.", tone: "muted" }],
       }
     : {
         id: `${view.nodeId}|power`,
-        title: "Power",
+        title: t("Power"),
         rows: [
-          { label: "Draw per machine", value: `${formatCompact(f.drawPerMachine)} EU/t` },
-          { label: "Demand for this card", value: demand },
+          { label: t("Draw per machine"), value: `${formatCompact(f.drawPerMachine)} EU/t` },
+          { label: t("Demand for this card"), value: demand },
         ],
         notes: [
           ...(power.stalled ? [{ text: power.title, tone: "red" as const }] : []),
@@ -181,24 +182,24 @@ export function countRowsTip(
   const rows: NonNullable<TipSpec["rows"]> = [];
   const notes: NonNullable<TipSpec["notes"]> = [];
   if (count.pinned) {
-    rows.push({ label: "Running", value: times(count.text) });
+    rows.push({ label: t("Running"), value: times(count.text) });
     rows.push({ label: PIN_RULE_LABEL[count.rule], value: `×${count.setText}` });
     if (count.rule === "upTo" && count.set !== undefined && count.set > 0) {
       rows.push({
-        label: "Usage",
+        label: t("Usage"),
         value: `${formatCompact(Math.min(100, (100 * count.value) / count.set))}%`,
       });
     }
     notes.push({ text: count.title, tone: "muted" });
   } else {
-    rows.push({ label: "Calculated", value: times(count.text) });
+    rows.push({ label: t("Calculated"), value: times(count.text) });
     // What the number counts (a crop card's are crops).
     notes.push({ text: count.title, tone: "muted" });
     const whole = Math.ceil(count.value - 1e-9);
     if (count.value > 0 && whole !== count.value) {
-      rows.push({ label: "Whole machines", value: `×${whole}` });
+      rows.push({ label: t("Whole machines"), value: `×${whole}` });
       rows.push({
-        label: "Average utilization",
+        label: t("Average utilization"),
         value: `${formatCompact((100 * count.value) / whole)}%`,
       });
     }
@@ -218,7 +219,7 @@ export function countRowsTip(
     actions: [
       { input: "left", label: count.pinned ? "Type a count" : "Set a count" },
       { input: "wheel", label: count.pinned ? "+1 / -1" : "Up to what runs" },
-      ...(count.pinned ? [{ input: "middle" as const, label: "Let the plan decide" }] : []),
+      ...(count.pinned ? [{ input: "middle" as const, label: t("Let the plan decide") }] : []),
     ],
   };
 }
@@ -244,7 +245,7 @@ export function ruleTip(view: Pick<CleanCardView, "nodeId" | "count">): TipSpec 
         tone: "muted",
       },
     ],
-    actions: count.ruleFixed ? [] : [{ input: "left", label: "Any, Up to, Exactly" }],
+    actions: count.ruleFixed ? [] : [{ input: "left", label: t("Any, Up to, Exactly") }],
   };
 }
 
@@ -255,12 +256,12 @@ export function footTip(nodeId: string, foot: CleanFootView): TipSpec {
   const rows: NonNullable<TipSpec["rows"]> = [];
   const notes: NonNullable<TipSpec["notes"]> = [];
   if (f.reason === "FORCED") {
-    for (const line of f.forced) rows.push({ label: "Forced in", value: line, tone: "warn" });
+    for (const line of f.forced) rows.push({ label: t("Forced in"), value: line, tone: "warn" });
     notes.push({ text: "Set it to Up to and it runs what its inputs allow.", tone: "muted" });
     return { id: `${nodeId}|foot`, title: `Exactly ${n(f.capacity)} running`, rows, notes };
   }
   const usage = f.capacity > 0 ? Math.min(100, (100 * f.running) / f.capacity) : 0;
-  rows.push({ label: "Usage", value: `${formatCompact(usage)}%` });
+  rows.push({ label: t("Usage"), value: `${formatCompact(usage)}%` });
   const all = f.running >= f.capacity - 0.000001;
   const title =
     f.running <= 0.0000005
@@ -291,7 +292,7 @@ export function footTip(nodeId: string, foot: CleanFootView): TipSpec {
       break;
     case "BOTTLENECK":
       if (f.wants !== undefined) {
-        rows.push({ label: "Wants", value: `×${n(f.wants)}`, tone: "red" });
+        rows.push({ label: t("Wants"), value: `×${n(f.wants)}`, tone: "red" });
         notes.push({
           text: `${n(f.wants - f.capacity)} more here would let the line run faster.`,
           tone: "red",
@@ -299,9 +300,9 @@ export function footTip(nodeId: string, foot: CleanFootView): TipSpec {
       }
       break;
     case "STARVED":
-      if (f.resource) rows.push({ label: "Short of", value: f.resource, tone: "warn" });
-      for (const name of f.tied) rows.push({ label: "Also short of", value: name, tone: "warn" });
-      for (const name of f.upstream) rows.push({ label: "Full upstream", value: name });
+      if (f.resource) rows.push({ label: t("Short of"), value: f.resource, tone: "warn" });
+      for (const name of f.tied) rows.push({ label: t("Also short of"), value: name, tone: "warn" });
+      for (const name of f.upstream) rows.push({ label: t("Full upstream"), value: name });
       notes.push({
         text:
           f.upstream.length > 0
@@ -311,15 +312,15 @@ export function footTip(nodeId: string, foot: CleanFootView): TipSpec {
       });
       break;
     case "CLOGGED":
-      if (f.resource) rows.push({ label: "Backs up", value: f.resource, tone: "warn" });
-      for (const name of f.tied) rows.push({ label: "Also backs up", value: name, tone: "warn" });
+      if (f.resource) rows.push({ label: t("Backs up"), value: f.resource, tone: "warn" });
+      for (const name of f.tied) rows.push({ label: t("Also backs up"), value: name, tone: "warn" });
       notes.push({
         text: "What takes it is full. Add machines after it or a drawer.",
         tone: "muted",
       });
       break;
     case "UNUSED":
-      if (f.resource) rows.push({ label: "Nothing takes", value: f.resource, tone: "warn" });
+      if (f.resource) rows.push({ label: t("Nothing takes"), value: f.resource, tone: "warn" });
       notes.push({ text: "Wire its output or give it a rate.", tone: "muted" });
       break;
     case "LIMITED":
@@ -342,7 +343,7 @@ export function stripTip(
     { label: chip.reading ? "Reads" : "Set to", value: chip.value },
   ];
   if (control?.id === "heatingCoil" && needK !== undefined)
-    rows.push({ label: "Recipe needs", value: `${needK} K` });
+    rows.push({ label: t("Recipe needs"), value: `${needK} K` });
   const notes: NonNullable<TipSpec["notes"]> = [];
   if (chip.warn) notes.push({ text: "Too cold for this recipe: it cannot run.", tone: "red" });
   notes.push({ text: "Pinned to the card: unpin it in the settings.", tone: "muted" });
@@ -354,9 +355,9 @@ export function stripTip(
     actions: chip.reading
       ? []
       : [
-          { input: "left", label: "Choose" },
-          { input: "right", label: "Step back" },
-          { input: "wheel", label: "Step" },
+          { input: "left", label: t("Choose") },
+          { input: "right", label: t("Step back") },
+          { input: "wheel", label: t("Step") },
         ],
   };
 }
@@ -365,13 +366,13 @@ export function stripTip(
 export function gearTip(nodeId: string, coilTooCold: boolean): TipSpec {
   return {
     id: `${nodeId}|gear`,
-    title: "Machine settings",
+    title: t("Machine settings"),
     notes: [
       { text: "Pin a setting there to show it on the card.", tone: "muted" },
       ...(coilTooCold
         ? [{ text: "The coil is too cold for this recipe: it cannot run.", tone: "red" as const }]
         : []),
     ],
-    actions: [{ input: "left", label: "Open" }],
+    actions: [{ input: "left", label: t("Open") }],
   };
 }

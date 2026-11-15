@@ -17,6 +17,22 @@ export class FactoryJsonError extends Error {
  * `loadViewedProject`), and that is where it becomes a plan-mode project, so
  * the one conversion also gets to tell the player what it could not carry over.
  */
+
+/** 份额夹在 0..1 并丢掉非数值：旧方案里可能存过越界值，保存时不能因此失败。 */
+function clampSpareShares<T extends { spareShares?: Record<string, Record<string, number>> }>(project: T): T {
+  const shares = project.spareShares;
+  if (!shares) return project;
+  const next: Record<string, Record<string, number>> = {};
+  for (const [leftover, bearers] of Object.entries(shares)) {
+    const clamped: Record<string, number> = {};
+    for (const [bearer, value] of Object.entries(bearers)) {
+      clamped[bearer] = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+    }
+    next[leftover] = clamped;
+  }
+  return { ...project, spareShares: next };
+}
+
 export function parseFactoryProjectJson(source: string, options?: LoadOptions): FactoryProject {
   let raw: unknown;
 
@@ -43,7 +59,7 @@ export function parseFactoryProjectJson(source: string, options?: LoadOptions): 
 }
 
 export function serializeFactoryProject(project: FactoryProject): string {
-  const validatedProject = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
+  const validatedProject = factoryProjectSchema.parse(normalizeProjectFuelProfiles(clampSpareShares(project)));
   return `${JSON.stringify(validatedProject, null, 2)}\n`;
 }
 

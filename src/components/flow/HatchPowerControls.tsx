@@ -223,9 +223,9 @@ export function PowerReadout({
         className="my-2 grid shrink-0 grid-cols-2 gap-x-6 gap-y-1 border-y border-line py-2"
       >
         {[
-          ["Parallels", `${running} / ${capacity}`],
+          [t("Parallels"), `${running} / ${capacity}`],
           [
-            "Overclocks",
+            t("Overclocks"),
             working.rows.find((row) => row.id === "overclocks")?.supplied ??
               String(report.overclockSteps),
           ],
@@ -306,10 +306,10 @@ export function PowerReadout({
                   style={{ left: "clamp(1px, " + win.euT / scaleEuT * 100 + "%, calc(100% - 1px))", transition: barTransition }} />
               ))}
             </div>
-            <PowerScaleMarker position={progress} label={suppliedText} caption="supplied"
+            <PowerScaleMarker position={progress} label={suppliedText} caption={t("supplied")}
               lane="upper" kind="supplied" transition={barTransition} />
             <PowerScaleMarker position={runningDraw / scaleEuT}
-              label={raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A"} caption="draw"
+              label={raw ? formatCompact(runningDraw) + " EU/t" : number(runningDraw / voltage) + "A"} caption={t("draw")}
               lane="lower" kind="draw" transition={barTransition} />
             <PowerScaleMarker position={1} label={nextText} caption={parallelTarget ? "max parallels" : "next"} lane="top" kind="threshold"
               transition={barTransition} title={targetLabel + ": " + next.euT + " EU/t"} />

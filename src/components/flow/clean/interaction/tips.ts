@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import type { CleanCardView, CleanChipView, CleanPortView } from "../clean-model";
 import type { TipSpec } from "./tip-spec";
 
@@ -8,8 +9,8 @@ import type { TipSpec } from "./tip-spec";
  */
 
 const BROWSE = [
-  { input: "left", label: "Recipes: what makes it" },
-  { input: "right", label: "Uses: what uses it" },
+  { input: "left", label: t("Recipes: what makes it") },
+  { input: "right", label: t("Uses: what uses it") },
 ] as const;
 
 function rate(number: string, unit: string): string {
@@ -21,11 +22,11 @@ export function portTip(p: CleanPortView): TipSpec {
   const chance = (p.port.resource as { chance?: number } | undefined)?.chance;
   const rows: NonNullable<TipSpec["rows"]> = [{ label: input ? "Consumed" : "Produced", value: rate(p.number, p.unit) }];
   if (chance !== undefined && chance < 1) {
-    rows.push({ label: "Chance", value: `${Math.round(chance * 10000) / 100}%` });
+    rows.push({ label: t("Chance"), value: `${Math.round(chance * 10000) / 100}%` });
   }
   const consumeChance = (p.port.resource as { consumeChance?: number } | undefined)?.consumeChance;
   if (input && consumeChance !== undefined && consumeChance < 1) {
-    rows.push({ label: "Used up", value: `${Math.round(consumeChance * 10000) / 100}% of runs` });
+    rows.push({ label: t("Used up"), value: `${Math.round(consumeChance * 10000) / 100}% of runs` });
   }
   const notes: NonNullable<TipSpec["notes"]> = [];
   const choices = p.port.resource?.alternatives?.length ?? 0;
@@ -33,14 +34,14 @@ export function portTip(p: CleanPortView): TipSpec {
   return {
     id: `${p.nodeId}|port|${p.handleId}`,
     title: p.name,
-    sub: input ? "Input" : "Output",
+    sub: input ? t("Input") : t("Output"),
     rows,
     notes,
     actions: [
       ...BROWSE,
-      ...(p.choice ? [{ input: "wheel" as const, label: "Change item" }] : []),
-      { input: "drag", label: "Connect" },
-      { input: "key", label: "R, U" },
+      ...(p.choice ? [{ input: "wheel" as const, label: t("Change item") }] : []),
+      { input: "drag", label: t("Connect") },
+      { input: "key", label: t("R, U") },
     ],
   };
 }
@@ -75,9 +76,9 @@ export function openBoxTip(p: CleanPortView, pinned: boolean): TipSpec {
     notes: [{ text: "Set it and the machine runs so this output gives exactly that.", tone: "muted" }],
     actions: [
       { input: "left", label: pinned ? "Change its rate" : "Set its rate" },
-      { input: "wheel", label: "+1, Ctrl 10, Shift 100" },
-      { input: "middle", label: "Clear" },
-      { input: "drag", label: "Connect" },
+      { input: "wheel", label: t("+1, Ctrl 10, Shift 100") },
+      { input: "middle", label: t("Clear") },
+      { input: "drag", label: t("Connect") },
     ],
   };
 }
@@ -89,7 +90,7 @@ export function forcedTip(p: CleanPortView): TipSpec {
     return {
       id: `${p.nodeId}|forced|${p.handleId}`,
       title: `Forced output: ${p.name}`,
-      rows: [{ label: "Ships out here", value: p.forced ? rate(p.forced.number, p.forced.unit) : "" }],
+      rows: [{ label: t("Ships out here"), value: p.forced ? rate(p.forced.number, p.forced.unit) : "" }],
       notes: [{ text: "The buffer's users take less than this makes. The extra is forced out here.", tone: "muted" }],
     };
   }
@@ -106,8 +107,8 @@ export function forcedTip(p: CleanPortView): TipSpec {
       },
     ],
     actions: [
-      { input: "left", label: "Choose who takes it" },
-      { input: "drag", label: "Hand it to another card" },
+      { input: "left", label: t("Choose who takes it") },
+      { input: "drag", label: t("Hand it to another card") },
     ],
   };
 }
@@ -119,12 +120,12 @@ export function nameTip(view: CleanCardView): TipSpec {
     sub: view.amps ? "Multiblock" : "Machine",
     rows: [
       { label: view.count.pinned ? "Pinned machines" : "Required machines", value: view.count.text.replace(/^×/, "x") },
-      ...(view.tier ? [{ label: "Configured tier", value: view.tier.label }] : []),
+      ...(view.tier ? [{ label: t("Configured tier"), value: view.tier.label }] : []),
     ],
     actions: view.hasPicker
       ? [
-          { input: "left", label: "Machines that run it" },
-          { input: "wheel", label: "Next machine" },
+          { input: "left", label: t("Machines that run it") },
+          { input: "wheel", label: t("Next machine") },
         ]
       : [],
   };
@@ -134,22 +135,22 @@ export function tierTip(view: CleanCardView): TipSpec {
   const tier = view.tier!;
   return {
     id: `${view.nodeId}|tier`,
-    title: "Voltage tier",
-    rows: [{ label: "Configured tier", value: tier.label }],
+    title: t("Voltage tier"),
+    rows: [{ label: t("Configured tier"), value: tier.label }],
     notes: view.power?.stalled ? [{ text: "Below the recipe's tier: it cannot run.", tone: "red" }] : [],
     actions: tier.fixed
       ? []
       : [
-          { input: "left", label: "Up" },
-          { input: "right", label: "Down" },
-          { input: "wheel", label: "Step" },
+          { input: "left", label: t("Up") },
+          { input: "right", label: t("Down") },
+          { input: "wheel", label: t("Step") },
         ],
   };
 }
 
 /** The power input panel of the classic card, on the chips and the power row of a machine with a hatch. */
 export function powerPanelTip(view: CleanCardView, part: "tier" | "amps" | "power"): TipSpec {
-  return { id: `${view.nodeId}|${part}`, title: "Power input", panel: { kind: "power", nodeId: view.nodeId, part } };
+  return { id: `${view.nodeId}|${part}`, title: t("Power input"), panel: { kind: "power", nodeId: view.nodeId, part } };
 }
 
 export function powerTip(view: CleanCardView): TipSpec {
@@ -173,12 +174,12 @@ export function countTip(view: CleanCardView): TipSpec {
     title: count.pinned ? "Pinned machines" : "Required machines",
     rows: [
       { label: count.pinned ? "Pinned" : "Calculated", value: count.text.replace(/^×/, "x") },
-      ...(!count.pinned && count.value > 0 ? [{ label: "Whole machines", value: String(Math.ceil(count.value - 0.000001)) }] : []),
+      ...(!count.pinned && count.value > 0 ? [{ label: t("Whole machines"), value: String(Math.ceil(count.value - 0.000001)) }] : []),
     ],
     notes: count.prompt ? [{ text: "No rate or pinned count in the plan needs this machine yet.", tone: "muted" }] : [],
     actions: [
       { input: "left", label: count.pinned ? "Change or unpin" : "Pin count" },
-      { input: "wheel", label: "+1 / -1" },
+      { input: "wheel", label: t("+1 / -1") },
     ],
   };
 }
@@ -186,7 +187,7 @@ export function countTip(view: CleanCardView): TipSpec {
 export function circuitTip(view: CleanCardView): TipSpec {
   return {
     id: `${view.nodeId}|circuit`,
-    title: "Programmed circuit",
+    title: t("Programmed circuit"),
     notes: [{ text: "Not consumed.", tone: "muted" }],
   };
 }
@@ -194,17 +195,17 @@ export function circuitTip(view: CleanCardView): TipSpec {
 export function menuTip(nodeId: string): TipSpec {
   return {
     id: `${nodeId}|menu`,
-    title: "Card actions",
-    actions: [{ input: "left", label: "Clone, add a recipe, settings, delete" }],
+    title: t("Card actions"),
+    actions: [{ input: "left", label: t("Clone, add a recipe, settings, delete") }],
   };
 }
 
 export function gearTip(nodeId: string): TipSpec {
   return {
     id: `${nodeId}|gear`,
-    title: "Machine settings",
+    title: t("Machine settings"),
     notes: [{ text: "Pin a setting there to show it on the card.", tone: "muted" }],
-    actions: [{ input: "left", label: "Open" }],
+    actions: [{ input: "left", label: t("Open") }],
   };
 }
 
@@ -212,14 +213,14 @@ export function stripChipTip(nodeId: string, chip: CleanChipView): TipSpec {
   return {
     id: `${nodeId}|setting|${chip.id}`,
     title: chip.label,
-    rows: chip.value ? [{ label: "Set to", value: chip.value }] : [],
+    rows: chip.value ? [{ label: t("Set to"), value: chip.value }] : [],
     notes: chip.warn ? [{ text: chip.title, tone: "warn" }] : [],
     actions: chip.reading
       ? []
       : [
-          { input: "left", label: "Switch" },
-          { input: "right", label: "Step back" },
-          { input: "wheel", label: "Step" },
+          { input: "left", label: t("Switch") },
+          { input: "right", label: t("Step back") },
+          { input: "wheel", label: t("Step") },
         ],
   };
 }

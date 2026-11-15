@@ -34,6 +34,22 @@ export const PLAN_CODE_HASH_KEY = "p";
  * and it travels. Power recipes (made here, not by the dataset) and the small
  * bee and crop tables stay whole. Used for copied plans and account sync.
  */
+
+/** 份额夹在 0..1 并丢掉非数值：旧方案里可能存过越界值，保存时不能因此失败。 */
+function clampSpareShares<T extends { spareShares?: Record<string, Record<string, number>> }>(project: T): T {
+  const shares = project.spareShares;
+  if (!shares) return project;
+  const next: Record<string, Record<string, number>> = {};
+  for (const [leftover, bearers] of Object.entries(shares)) {
+    const clamped: Record<string, number> = {};
+    for (const [bearer, value] of Object.entries(bearers)) {
+      clamped[bearer] = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+    }
+    next[leftover] = clamped;
+  }
+  return { ...project, spareShares: next };
+}
+
 export function withoutRuntimeTables(
   project: FactoryProject,
   canRestore: (recipeId: string) => boolean = isRestorableRecipe,
@@ -56,7 +72,7 @@ export function withoutRuntimeTables(
 }
 
 export async function encodePlanCode(project: FactoryProject): Promise<string> {
-  const plan = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
+  const plan = factoryProjectSchema.parse(normalizeProjectFuelProfiles(clampSpareShares(project)));
   // A code is a copy, never the post: whoever opens it gets a plan of their
   // own, not a link to the sender's community setup.
   const { communityPlanId, ...metadata } = plan.metadata ?? {};

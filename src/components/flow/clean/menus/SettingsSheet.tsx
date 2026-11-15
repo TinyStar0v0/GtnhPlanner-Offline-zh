@@ -40,7 +40,7 @@ const KNOB_COLORS: Record<string, string> = {
   bioVatShutter: "#e0a060",
 };
 
-const NONE = "No settings for this machine.";
+const NONE = t("No settings for this machine.");
 
 /** The game's font has no floor brackets or minus sign: written out, as the mod does. */
 const glyphs = (text: string) => text.replace(/−/g, "-").replace(/⌊/g, "floor(").replace(/⌋/g, ")").replace(/⌈/g, "ceil(").replace(/⌉/g, ")");
@@ -57,7 +57,7 @@ function FormulaRows({ lines }: { lines: FormulaLine[] }) {
       <div className="cs-title">{t("Formulas")}</div>
       {lines.map((entry, index) => (
         <div key={`${index}:${entry.label}`} className="cs-f">
-          <span className="cs-f-label">{entry.label}</span>
+          <span className="cs-f-label">{t(entry.label)}</span>
           <span className="cs-f-math">
             {entry.math.map((term, i) => (
               <Term key={i} term={term} />

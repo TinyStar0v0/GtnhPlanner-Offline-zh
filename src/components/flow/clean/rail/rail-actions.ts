@@ -320,7 +320,9 @@ function inHand(write: () => void): void {
 export function spareMap(spare: SpareView, shares: readonly number[]): Record<string, number> {
   const map: Record<string, number> = {};
   spare.bearers.forEach((b, i) => {
-    map[b.key] = shares[i] ?? 0;
+    // 份额必须落在 0..1：拖动和浮点运算会算出 1.0000001 这种值，schema 会拒收。
+    const value = shares[i] ?? 0;
+    map[b.key] = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
   });
   return map;
 }

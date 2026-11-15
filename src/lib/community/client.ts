@@ -165,14 +165,9 @@ export async function deleteCommunityPlan(planId: string): Promise<void> {
 
 /** The signed-in user, or undefined; throws when the server could not tell. */
 export async function fetchCurrentUser(): Promise<CommunityUser | undefined> {
-  const response = await fetch("/api/community/auth/me");
-  const body = (await response.json().catch(() => undefined)) as
-    | { user: CommunityUser | null }
-    | undefined;
-  if (!response.ok || !body) {
-    throw new Error(`Account check failed (${response.status})`);
-  }
-  return body.user ?? undefined;
+  // PERSONAL_BUILD_NO_ACCOUNTS：本地版没有账户，也没有 /api/community/auth/me 这个接口，
+  // 直接当作未登录，省掉一次必然 404 的请求。
+  return undefined;
 }
 
 export async function registerCommunityUser(

@@ -83,10 +83,10 @@ export function MachineFormulas({ lines }: { lines: FormulaLine[] }) {
   );
   const line = (entry: FormulaLine, index: number): ReactNode => (
     <div
-      key={`${index}:${entry.label}`}
+      key={`${index}:${t(entry.label)}`}
       className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)_auto] items-baseline gap-x-1 whitespace-nowrap"
     >
-      <span className="uppercase tracking-wide">{entry.label}</span>
+      <span className="uppercase tracking-wide">{t(entry.label)}</span>
       <span className="min-w-0 overflow-hidden text-ellipsis text-right tabular-nums">
         {entry.math.map((term, index) => (
           <Term key={index} term={term} />
