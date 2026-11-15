@@ -7,6 +7,13 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import next from "next";
 
+process.on("uncaughtException", (error) => {
+  console.error("[serve] 未捕获异常：", error?.message ?? error);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[serve] 未处理的 Promise 拒绝：", reason?.message ?? reason);
+});
+
 const mode = process.argv[2] === "start" ? "start" : "dev";
 const portArg = process.argv.find((arg) => /^\d+$/.test(arg));
 const port = Number(portArg ?? 3000);
@@ -35,7 +42,12 @@ function openBrowser() {
   if (!shouldOpen) return;
   try {
     // stdio 用 ignore：受限环境里带管道的子进程会被拒。
-    spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
+    // error 事件必须接住：没人监听时它会冒泡成未捕获异常，把服务带崩。
+    const child = spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
+    child.on("error", () => {
+      console.log(`浏览器没自动打开，请手动访问 ${url}`);
+    });
+    child.unref();
   } catch {
     console.log(`浏览器没自动打开，请手动访问 ${url}`);
   }
